@@ -33,9 +33,8 @@ A terminal-based Docker container dashboard built with Kotlin and [Mosaic](https
 ## Build & Run
 
 ```bash
-./gradlew build          # compile + assemble
-./gradlew run            # run the dashboard
-./gradlew run -q         # run without Gradle output noise (recommended)
+./run.sh                 # build and run the dashboard
+./gradlew build          # compile only
 ```
 
 ## Key Bindings
@@ -49,31 +48,6 @@ A terminal-based Docker container dashboard built with Kotlin and [Mosaic](https
 | `q`              | Quit                                |
 
 Destructive operations (stop, pull-and-recreate) require `y`/`n` confirmation. Starting a stopped container runs immediately.
-
-## Project Structure
-
-```
-src/main/kotlin/dev/dockerdashboard/
-├── Main.kt                  # Entrypoint, state management, coroutine loops
-├── model/
-│   └── ContainerInfo.kt     # Data models (ContainerInfo, ContainerState, ActiveOperation)
-├── service/
-│   ├── DockerService.kt     # Docker client wrapper (list, stats, start/stop, recreate)
-│   └── RegistryService.kt   # Docker Hub update checker (digest comparison)
-└── ui/
-    ├── DashboardApp.kt      # Root composable, keyboard handling
-    ├── ContainerGrid.kt     # Responsive grid layout
-    ├── ContainerCard.kt     # Individual container card with border drawing
-    └── StatusBar.kt         # Top bar (connection/counts) and bottom bar (hints/errors)
-```
-
-## Tech Stack
-
-- **[Kotlin](https://kotlinlang.org/)** 2.1.0
-- **[Mosaic](https://github.com/JakeWharton/mosaic)** 0.18.0 -- Jetpack Compose runtime for terminal UIs
-- **[docker-java](https://github.com/docker-java/docker-java)** 3.4.1 -- Docker Engine API client
-- **[Kotlin Coroutines](https://github.com/Kotlin/kotlinx.coroutines)** 1.10.1
-- **Gradle** 8.12
 
 ## License
 
