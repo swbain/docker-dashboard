@@ -21,6 +21,10 @@ application {
     mainClass.set("dev.dockerdashboard.MainKt")
 }
 
+tasks.named<JavaExec>("run") {
+    standardInput = System.`in`
+}
+
 kotlin {
     jvmToolchain(17)
 }
