@@ -1,0 +1,133 @@
+package dev.dockerdashboard.ui
+
+import androidx.compose.runtime.Composable
+import com.jakewharton.mosaic.layout.DrawScope
+import com.jakewharton.mosaic.layout.DrawStyle
+import com.jakewharton.mosaic.layout.drawBehind
+import com.jakewharton.mosaic.layout.height
+import com.jakewharton.mosaic.layout.padding
+import com.jakewharton.mosaic.layout.width
+import com.jakewharton.mosaic.modifier.Modifier
+import com.jakewharton.mosaic.text.SpanStyle
+import com.jakewharton.mosaic.text.buildAnnotatedString
+import com.jakewharton.mosaic.ui.Box
+import com.jakewharton.mosaic.ui.Color
+import com.jakewharton.mosaic.ui.Column
+import com.jakewharton.mosaic.ui.Text
+import com.jakewharton.mosaic.ui.TextStyle
+import dev.dockerdashboard.model.ContainerInfo
+import dev.dockerdashboard.model.ContainerState
+
+private val GRAY = Color(100, 100, 100)
+private val LIGHT_GRAY = Color(160, 160, 160)
+
+@Composable
+fun ContainerCard(
+    container: ContainerInfo,
+    isSelected: Boolean,
+    cardWidth: Int,
+    modifier: Modifier = Modifier,
+) {
+    val borderColor = if (isSelected) Color.Cyan else GRAY
+    val stateColor = when (container.state) {
+        ContainerState.RUNNING -> Color.Green
+        ContainerState.PAUSED -> Color.Yellow
+        ContainerState.EXITED, ContainerState.DEAD -> Color.Red
+        ContainerState.RESTARTING -> Color.Cyan
+        ContainerState.CREATED -> Color.Blue
+        else -> LIGHT_GRAY
+    }
+
+    Box(
+        modifier = modifier
+            .width(cardWidth)
+            .height(CARD_HEIGHT)
+            .drawBehind { drawBorder(borderColor) }
+            .padding(left = 2, right = 2, top = 1, bottom = 1)
+    ) {
+        Column {
+            // Container name
+            Text(
+                container.name.take(cardWidth - 4),
+                color = if (isSelected) Color.White else LIGHT_GRAY,
+                textStyle = TextStyle.Bold,
+            )
+
+            // Image + update indicator
+            val imageText = buildAnnotatedString {
+                append(container.image.take(cardWidth - 14))
+                if (container.updateAvailable) {
+                    append(" ")
+                    pushStyle(SpanStyle(color = Color.Yellow, textStyle = TextStyle.Bold))
+                    append("[UPDATE]")
+                    pop()
+                }
+            }
+            Text(imageText)
+
+            // Status
+            Text(container.status.take(cardWidth - 4), color = stateColor)
+
+            // Ports
+            if (container.ports.isNotEmpty()) {
+                Text(container.ports.take(cardWidth - 4), color = GRAY)
+            }
+
+            // Resources (running containers only)
+            if (container.state == ContainerState.RUNNING && container.memoryLimitMb > 0) {
+                val resourceText = buildAnnotatedString {
+                    pushStyle(SpanStyle(color = LIGHT_GRAY))
+                    append("CPU: ")
+                    pop()
+                    pushStyle(SpanStyle(color = Color.White))
+                    append(String.format("%.1f%%", container.cpuPercent))
+                    pop()
+                    append("  ")
+                    pushStyle(SpanStyle(color = LIGHT_GRAY))
+                    append("MEM: ")
+                    pop()
+                    pushStyle(SpanStyle(color = Color.White))
+                    append(
+                        String.format(
+                            "%.0f/%.0fMB",
+                            container.memoryUsageMb,
+                            container.memoryLimitMb
+                        )
+                    )
+                    pop()
+                }
+                Text(resourceText)
+            }
+        }
+    }
+}
+
+private fun DrawScope.drawBorder(color: Color) {
+    val w = width
+    val h = height
+    if (w < 2 || h < 2) return
+
+    // Top-left corner
+    drawText(0, 0, "┌", foreground = color)
+    // Top-right corner
+    drawText(0, w - 1, "┐", foreground = color)
+    // Bottom-left corner
+    drawText(h - 1, 0, "└", foreground = color)
+    // Bottom-right corner
+    drawText(h - 1, w - 1, "┘", foreground = color)
+
+    // Top and bottom edges
+    for (col in 1 until w - 1) {
+        drawText(0, col, "─", foreground = color)
+        drawText(h - 1, col, "─", foreground = color)
+    }
+
+    // Left and right edges
+    for (row in 1 until h - 1) {
+        drawText(row, 0, "│", foreground = color)
+        drawText(row, w - 1, "│", foreground = color)
+    }
+}
+
+const val CARD_HEIGHT = 8
+const val MIN_CARD_WIDTH = 36
