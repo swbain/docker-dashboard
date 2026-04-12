@@ -123,6 +123,27 @@ fun BottomActionBar(
                     pop()
 
                     pushStyle(SpanStyle(color = ACCENT, textStyle = TextStyle.Bold))
+                    append("l")
+                    pop()
+                    pushStyle(SpanStyle(color = Color(160, 160, 160)))
+                    append(" logs  ")
+                    pop()
+
+                    pushStyle(SpanStyle(color = ACCENT, textStyle = TextStyle.Bold))
+                    append("d")
+                    pop()
+                    pushStyle(SpanStyle(color = Color(160, 160, 160)))
+                    append(" detail  ")
+                    pop()
+
+                    pushStyle(SpanStyle(color = ACCENT, textStyle = TextStyle.Bold))
+                    append("e")
+                    pop()
+                    pushStyle(SpanStyle(color = Color(160, 160, 160)))
+                    append(" shell  ")
+                    pop()
+
+                    pushStyle(SpanStyle(color = ACCENT, textStyle = TextStyle.Bold))
                     append("q")
                     pop()
                     pushStyle(SpanStyle(color = Color(160, 160, 160)))

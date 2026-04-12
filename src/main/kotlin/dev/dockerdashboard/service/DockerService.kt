@@ -4,12 +4,14 @@ import com.github.dockerjava.api.DockerClient
 import com.github.dockerjava.api.async.ResultCallback
 import com.github.dockerjava.api.model.ContainerNetwork
 import com.github.dockerjava.api.model.ExposedPort
+import com.github.dockerjava.api.model.Frame
 import com.github.dockerjava.api.model.HostConfig
 import com.github.dockerjava.api.model.Statistics
 import com.github.dockerjava.core.DefaultDockerClientConfig
 import com.github.dockerjava.core.DockerClientImpl
 import com.github.dockerjava.transport.DockerHttpClient
 import com.github.dockerjava.httpclient5.ApacheDockerHttpClient
+import dev.dockerdashboard.model.ContainerDetail
 import dev.dockerdashboard.model.ContainerInfo
 import dev.dockerdashboard.model.ContainerState
 import dev.dockerdashboard.model.VolumeMount
@@ -209,52 +211,58 @@ class DockerService : Closeable {
         }
     }
 
-    // --- Stubs for feature teammates ---
-
-    suspend fun getContainerLogs(containerId: String, tail: Int = 200): List<String> {
-        // Teammate A implements
-        return emptyList()
+    suspend fun getContainerLogs(containerId: String, tail: Int = 200): List<String> = withContext(Dispatchers.IO) {
+        val lines = mutableListOf<String>()
+        val latch = CountDownLatch(1)
+        client.logContainerCmd(containerId)
+            .withStdOut(true)
+            .withStdErr(true)
+            .withTail(tail)
+            .withFollowStream(false)
+            .exec(object : ResultCallback<Frame> {
+                override fun onStart(closeable: Closeable?) {}
+                override fun onNext(frame: Frame) {
+                    frame.payload?.let { lines.add(String(it).trimEnd()) }
+                }
+                override fun onError(throwable: Throwable) { latch.countDown() }
+                override fun onComplete() { latch.countDown() }
+                override fun close() {}
+            })
+        latch.await(5, TimeUnit.SECONDS)
+        lines
     }
 
-    data class ContainerDetail(
-        val id: String,
-        val name: String,
-        val image: String,
-        val status: String,
-        val created: String,
-        val command: String,
-        val entrypoint: String,
-        val restartPolicy: String,
-        val env: List<String>,
-        val networks: List<String>,
-        val volumes: List<VolumeMount>,
-        val labels: Map<String, String>,
-        val exitCode: Int?,
-    )
-
-    suspend fun inspectContainerDetail(containerId: String): ContainerDetail {
-        // Teammate B implements
-        return ContainerDetail(
-            id = containerId,
-            name = "",
-            image = "",
-            status = "",
-            created = "",
-            command = "",
-            entrypoint = "",
-            restartPolicy = "",
-            env = emptyList(),
-            networks = emptyList(),
-            volumes = emptyList(),
-            labels = emptyMap(),
-            exitCode = null,
+    suspend fun inspectContainerDetail(containerId: String): ContainerDetail = withContext(Dispatchers.IO) {
+        val inspect = client.inspectContainerCmd(containerId).exec()
+        val config = inspect.config
+        val hostConfig = inspect.hostConfig
+        ContainerDetail(
+            id = inspect.id ?: containerId,
+            name = inspect.name?.removePrefix("/") ?: "",
+            image = config?.image ?: "",
+            status = inspect.state?.status ?: "",
+            created = inspect.created ?: "",
+            command = config?.cmd?.joinToString(" ") ?: "",
+            entrypoint = config?.entrypoint?.joinToString(" ") ?: "",
+            restartPolicy = hostConfig?.restartPolicy?.name ?: "",
+            env = config?.env?.toList() ?: emptyList(),
+            networks = inspect.networkSettings?.networks?.keys?.toList() ?: emptyList(),
+            volumes = inspect.mounts?.map { m ->
+                VolumeMount(
+                    source = m.source ?: "",
+                    destination = m.destination?.toString() ?: "",
+                    mode = if (m.rw == true) "rw" else "ro",
+                )
+            } ?: emptyList(),
+            labels = config?.labels ?: emptyMap(),
+            exitCode = inspect.state?.exitCodeLong?.toInt(),
         )
     }
 
     data class PruneResult(val count: Int, val spaceFreedMb: Long)
 
     suspend fun pruneImages(): PruneResult {
-        // Teammate J implements
+        // Teammate J implements in Phase 3
         return PruneResult(0, 0)
     }
 

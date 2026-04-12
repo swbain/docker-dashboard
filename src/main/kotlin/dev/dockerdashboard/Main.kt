@@ -10,19 +10,21 @@ import dev.dockerdashboard.service.RegistryService
 import dev.dockerdashboard.ui.CARD_HEIGHT
 import dev.dockerdashboard.ui.DashboardApp
 import dev.dockerdashboard.ui.MIN_CARD_WIDTH
-import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.Job
 import kotlin.math.max
 
 fun main() {
     var execRequest: ExecRequest? = null
     while (true) {
         runMosaicBlocking {
+            val keepAliveJob = remember { Job() }
             val dockerService = remember { DockerService() }
             val registryService = remember { RegistryService() }
             val scope = rememberCoroutineScope()
             val store = remember {
                 DashboardStore(dockerService, registryService, scope) { req ->
                     execRequest = req
+                    keepAliveJob.cancel()
                 }
             }
 
@@ -36,11 +38,12 @@ fun main() {
             DashboardApp(
                 state = store.state,
                 displayContainers = store.displayContainers,
+                detailData = store.detailData,
                 maxVisibleRows = maxVisibleRows,
                 onAction = { action -> store.dispatch(action, columns, maxVisibleRows) },
             )
 
-            LaunchedEffect(Unit) { awaitCancellation() }
+            LaunchedEffect(Unit) { keepAliveJob.join() }
         }
         val req = execRequest ?: break
         execRequest = null

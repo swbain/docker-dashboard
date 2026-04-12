@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.dockerdashboard.model.ActiveOperation
+import dev.dockerdashboard.model.ContainerDetail
 import dev.dockerdashboard.model.ContainerInfo
 import dev.dockerdashboard.model.ContainerState
 import dev.dockerdashboard.model.DashboardState
@@ -34,6 +35,9 @@ class DashboardStore(
     private val onExecRequest: ((ExecRequest) -> Unit)? = null,
 ) {
     var state by mutableStateOf(DashboardState())
+        private set
+
+    var detailData by mutableStateOf<ContainerDetail?>(null)
         private set
 
     val displayContainers: List<ContainerInfo>
@@ -223,20 +227,54 @@ class DashboardStore(
                     }
                 }
             }
+            is PendingConfirmation.ShellExec -> {
+                onExecRequest?.invoke(ExecRequest(pending.containerId, pending.containerName))
+            }
             is PendingConfirmation.BulkStop -> { /* implemented by bulk ops teammate */ }
             is PendingConfirmation.BulkUpdate -> { /* implemented by bulk ops teammate */ }
             is PendingConfirmation.PruneImages -> { /* implemented by image cleanup teammate */ }
         }
     }
 
-    // --- Skeleton handlers for new actions (implemented by feature teammates) ---
+    // --- Logs (Teammate A) ---
 
     private fun handleViewLogs() {
-        // Teammate A implements
+        val s = state
+        val container = displayContainers.getOrNull(s.selectedIndex) ?: return
+        scope.launch(Dispatchers.IO) {
+            try {
+                val logs = dockerService.getContainerLogs(container.id)
+                state = state.copy(
+                    viewMode = ViewMode.LOGS,
+                    logLines = logs,
+                    logContainerId = container.id,
+                    logScrollOffset = (logs.size - 20).coerceAtLeast(0),
+                )
+            } catch (e: Exception) {
+                setError("Failed to fetch logs: ${e.message?.take(50)}")
+            }
+        }
     }
 
+    // --- Detail (Teammate B) ---
+
     private fun handleViewDetail() {
-        // Teammate B implements
+        val s = state
+        val container = displayContainers.getOrNull(s.selectedIndex) ?: return
+        state = s.copy(
+            viewMode = ViewMode.DETAIL,
+            detailContainerId = container.id,
+            detailScrollOffset = 0,
+        )
+        detailData = null
+        scope.launch(Dispatchers.IO) {
+            try {
+                detailData = dockerService.inspectContainerDetail(container.id)
+            } catch (e: Exception) {
+                setError("Detail fetch failed: ${e.message?.take(50)}")
+                state = state.copy(viewMode = ViewMode.GRID, detailContainerId = null)
+            }
+        }
     }
 
     private fun handleBackToGrid() {
@@ -248,7 +286,26 @@ class DashboardStore(
             detailContainerId = null,
             detailScrollOffset = 0,
         )
+        detailData = null
     }
+
+    // --- Shell Exec (Teammate E) ---
+
+    private fun handleShellExec() {
+        val s = state
+        val container = displayContainers.getOrNull(s.selectedIndex) ?: return
+        if (s.activeOperation != null) return
+        if (container.state != ContainerState.RUNNING) return
+
+        state = s.copy(
+            pendingConfirmation = PendingConfirmation.ShellExec(
+                containerId = container.id,
+                containerName = container.name,
+            ),
+        )
+    }
+
+    // --- Skeleton handlers for Phase 2/3 features ---
 
     private fun handleToggleSelect() {
         // Teammate I implements
@@ -274,10 +331,6 @@ class DashboardStore(
         // Teammate G implements
     }
 
-    private fun handleShellExec() {
-        // Teammate E implements
-    }
-
     private fun handlePruneImages() {
         // Teammate J implements
     }
@@ -285,8 +338,14 @@ class DashboardStore(
     private fun handleScrollUp() {
         val s = state
         when (s.viewMode) {
-            ViewMode.LOGS -> state = s.copy(logScrollOffset = (s.logScrollOffset - 1).coerceAtLeast(0))
-            ViewMode.DETAIL -> state = s.copy(detailScrollOffset = (s.detailScrollOffset - 1).coerceAtLeast(0))
+            ViewMode.LOGS -> {
+                val newOffset = (s.logScrollOffset - 1).coerceAtLeast(0)
+                state = s.copy(logScrollOffset = newOffset)
+            }
+            ViewMode.DETAIL -> {
+                val newOffset = (s.detailScrollOffset - 1).coerceAtLeast(0)
+                state = s.copy(detailScrollOffset = newOffset)
+            }
             else -> {}
         }
     }
@@ -294,7 +353,10 @@ class DashboardStore(
     private fun handleScrollDown() {
         val s = state
         when (s.viewMode) {
-            ViewMode.LOGS -> state = s.copy(logScrollOffset = s.logScrollOffset + 1)
+            ViewMode.LOGS -> {
+                val newOffset = (s.logScrollOffset + 1).coerceIn(0, (s.logLines.size - 1).coerceAtLeast(0))
+                state = s.copy(logScrollOffset = newOffset)
+            }
             ViewMode.DETAIL -> state = s.copy(detailScrollOffset = s.detailScrollOffset + 1)
             else -> {}
         }

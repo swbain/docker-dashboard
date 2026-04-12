@@ -2,7 +2,6 @@ package dev.dockerdashboard.ui
 
 import androidx.compose.runtime.Composable
 import com.jakewharton.mosaic.layout.DrawScope
-import com.jakewharton.mosaic.layout.DrawStyle
 import com.jakewharton.mosaic.layout.drawBehind
 import com.jakewharton.mosaic.layout.height
 import com.jakewharton.mosaic.layout.padding
@@ -13,6 +12,7 @@ import com.jakewharton.mosaic.text.buildAnnotatedString
 import com.jakewharton.mosaic.ui.Box
 import com.jakewharton.mosaic.ui.Color
 import com.jakewharton.mosaic.ui.Column
+import com.jakewharton.mosaic.ui.Row
 import com.jakewharton.mosaic.ui.Text
 import com.jakewharton.mosaic.ui.TextStyle
 import dev.dockerdashboard.model.ActiveOperation
@@ -59,13 +59,28 @@ fun ContainerCard(
             .padding(left = 2, right = 2, top = 1, bottom = 1)
     ) {
         Column {
-            // Container name + update arrow
+            // Container name + health icon + update arrow
             val nameText = buildAnnotatedString {
-                append(container.name.take(cardWidth - if (container.updateAvailable) 6 else 4))
+                // Health icon
+                val healthIcon = container.healthStatus
+                if (healthIcon != null) {
+                    val healthColor = when (healthIcon) {
+                        "healthy" -> Color.Green
+                        "unhealthy" -> Color.Red
+                        "starting" -> Color.Yellow
+                        else -> Color(160, 160, 160)
+                    }
+                    pushStyle(SpanStyle(color = healthColor))
+                    append("\u2665")
+                    pop()
+                    append(" ")
+                }
+                val maxNameLen = cardWidth - 4 - (if (container.updateAvailable) 2 else 0) - (if (healthIcon != null) 2 else 0)
+                append(container.name.take(maxNameLen))
                 if (container.updateAvailable) {
                     append(" ")
                     pushStyle(SpanStyle(color = Color.Yellow, textStyle = TextStyle.Bold))
-                    append("↑")
+                    append("\u2191")
                     pop()
                 }
             }
@@ -129,30 +144,76 @@ fun ContainerCard(
                     Text(container.ports.take(cardWidth - 4), color = GRAY)
                 }
 
-                // Resources (running containers only)
+                // Resources (running containers only) — with sparklines on selected card
                 if (container.state == ContainerState.RUNNING && container.memoryLimitMb > 0) {
-                    val resourceText = buildAnnotatedString {
-                        pushStyle(SpanStyle(color = LIGHT_GRAY))
-                        append("CPU: ")
-                        pop()
-                        pushStyle(SpanStyle(color = Color.White))
-                        append(String.format("%.1f%%", container.cpuPercent))
-                        pop()
-                        append("  ")
-                        pushStyle(SpanStyle(color = LIGHT_GRAY))
-                        append("MEM: ")
-                        pop()
-                        pushStyle(SpanStyle(color = Color.White))
-                        append(
-                            String.format(
-                                "%.0f/%.0fMB",
-                                container.memoryUsageMb,
-                                container.memoryLimitMb
+                    if (isSelected && statsHistory.size >= 2) {
+                        // CPU sparkline + current value
+                        Row {
+                            Text("CPU ", color = LIGHT_GRAY)
+                            Sparkline(
+                                values = statsHistory.map { it.cpuPercent },
+                                maxValue = 100.0,
+                                width = 10,
+                                color = Color.Cyan,
                             )
-                        )
-                        pop()
+                            Text(String.format(" %.1f%%", container.cpuPercent), color = Color.White)
+                        }
+                        // Memory sparkline + current value
+                        Row {
+                            Text("MEM ", color = LIGHT_GRAY)
+                            Sparkline(
+                                values = statsHistory.map { it.memoryUsageMb },
+                                maxValue = container.memoryLimitMb,
+                                width = 10,
+                                color = Color.Green,
+                            )
+                            Text(String.format(" %.0f/%.0fMB", container.memoryUsageMb, container.memoryLimitMb), color = Color.White)
+                        }
+                    } else {
+                        // Original numeric display
+                        val resourceText = buildAnnotatedString {
+                            pushStyle(SpanStyle(color = LIGHT_GRAY))
+                            append("CPU: ")
+                            pop()
+                            pushStyle(SpanStyle(color = Color.White))
+                            append(String.format("%.1f%%", container.cpuPercent))
+                            pop()
+                            append("  ")
+                            pushStyle(SpanStyle(color = LIGHT_GRAY))
+                            append("MEM: ")
+                            pop()
+                            pushStyle(SpanStyle(color = Color.White))
+                            append(
+                                String.format(
+                                    "%.0f/%.0fMB",
+                                    container.memoryUsageMb,
+                                    container.memoryLimitMb
+                                )
+                            )
+                            pop()
+                        }
+                        Text(resourceText)
                     }
-                    Text(resourceText)
+                }
+
+                // Volumes on stopped containers (they have empty content lines available)
+                if (container.state != ContainerState.RUNNING && container.volumes.isNotEmpty()) {
+                    val maxVols = if (container.ports.isEmpty()) 2 else 1
+                    for (vol in container.volumes.take(maxVols)) {
+                        val src = vol.source.let { s ->
+                            if (s.length > contentWidth / 2 - 1) "\u2026" + s.takeLast(contentWidth / 2 - 2) else s
+                        }
+                        val dst = vol.destination.let { d ->
+                            if (d.length > contentWidth / 2 - 1) "\u2026" + d.takeLast(contentWidth / 2 - 2) else d
+                        }
+                        Text(
+                            buildAnnotatedString {
+                                pushStyle(SpanStyle(color = GRAY))
+                                append("$src \u2192 $dst")
+                                pop()
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -164,25 +225,19 @@ private fun DrawScope.drawBorder(color: Color) {
     val h = height
     if (w < 2 || h < 2) return
 
-    // Top-left corner
-    drawText(0, 0, "┌", foreground = color)
-    // Top-right corner
-    drawText(0, w - 1, "┐", foreground = color)
-    // Bottom-left corner
-    drawText(h - 1, 0, "└", foreground = color)
-    // Bottom-right corner
-    drawText(h - 1, w - 1, "┘", foreground = color)
+    drawText(0, 0, "\u250c", foreground = color)
+    drawText(0, w - 1, "\u2510", foreground = color)
+    drawText(h - 1, 0, "\u2514", foreground = color)
+    drawText(h - 1, w - 1, "\u2518", foreground = color)
 
-    // Top and bottom edges
     for (col in 1 until w - 1) {
-        drawText(0, col, "─", foreground = color)
-        drawText(h - 1, col, "─", foreground = color)
+        drawText(0, col, "\u2500", foreground = color)
+        drawText(h - 1, col, "\u2500", foreground = color)
     }
 
-    // Left and right edges
     for (row in 1 until h - 1) {
-        drawText(row, 0, "│", foreground = color)
-        drawText(row, w - 1, "│", foreground = color)
+        drawText(row, 0, "\u2502", foreground = color)
+        drawText(row, w - 1, "\u2502", foreground = color)
     }
 }
 

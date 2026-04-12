@@ -69,4 +69,11 @@ sealed interface PendingConfirmation {
     ) : PendingConfirmation {
         override val message = "Prune unused images?"
     }
+
+    data class ShellExec(
+        val containerId: String,
+        val containerName: String,
+    ) : PendingConfirmation {
+        override val message = "Shell into $containerName?"
+    }
 }

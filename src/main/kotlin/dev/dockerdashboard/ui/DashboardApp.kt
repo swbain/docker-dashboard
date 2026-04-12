@@ -15,6 +15,8 @@ import com.jakewharton.mosaic.ui.Color
 import com.jakewharton.mosaic.ui.Column
 import com.jakewharton.mosaic.ui.Text
 import com.jakewharton.mosaic.ui.TextStyle
+import dev.dockerdashboard.model.ContainerDetail
+import dev.dockerdashboard.model.ContainerInfo
 import dev.dockerdashboard.model.ContainerState
 import dev.dockerdashboard.model.DashboardState
 import dev.dockerdashboard.model.ViewMode
@@ -47,7 +49,8 @@ sealed interface UiAction {
 @Composable
 fun DashboardApp(
     state: DashboardState,
-    displayContainers: List<dev.dockerdashboard.model.ContainerInfo>,
+    displayContainers: List<ContainerInfo>,
+    detailData: ContainerDetail?,
     maxVisibleRows: Int,
     onAction: (UiAction) -> Unit,
 ) {
@@ -127,7 +130,7 @@ fun DashboardApp(
                         else -> {
                             // Scroll indicator: above
                             if (scrollOffset > 0) {
-                                Text("  ▲ ${scrollOffset} more row(s) above", color = Color(140, 140, 140))
+                                Text("  \u25b2 ${scrollOffset} more row(s) above", color = Color(140, 140, 140))
                             }
 
                             // Container grid
@@ -145,7 +148,7 @@ fun DashboardApp(
                             // Scroll indicator: below
                             val rowsBelow = totalRows - scrollOffset - maxVisibleRows
                             if (rowsBelow > 0) {
-                                Text("  ▼ ${rowsBelow} more row(s) below", color = Color(140, 140, 140))
+                                Text("  \u25bc ${rowsBelow} more row(s) below", color = Color(140, 140, 140))
                             }
                         }
                     }
@@ -170,7 +173,16 @@ fun DashboardApp(
                     .height(termHeight)
                     .onKeyEvent { event -> handleKeyEvent(event, state, onAction) },
             ) {
-                Text("Detail panel placeholder — press Esc to go back", color = Color(140, 140, 140))
+                if (detailData != null) {
+                    DetailPanel(
+                        detail = detailData,
+                        scrollOffset = state.detailScrollOffset,
+                        termWidth = termWidth,
+                        termHeight = termHeight,
+                    )
+                } else {
+                    Text("Loading detail...", color = Color(140, 140, 140))
+                }
             }
         }
         ViewMode.LOGS -> {
@@ -180,7 +192,13 @@ fun DashboardApp(
                     .height(termHeight)
                     .onKeyEvent { event -> handleKeyEvent(event, state, onAction) },
             ) {
-                Text("Log viewer placeholder — press Esc to go back", color = Color(140, 140, 140))
+                LogViewer(
+                    logLines = state.logLines,
+                    containerName = state.containers.find { it.id == state.logContainerId }?.name ?: "",
+                    scrollOffset = state.logScrollOffset,
+                    termWidth = termWidth,
+                    termHeight = termHeight,
+                )
             }
         }
     }
@@ -252,6 +270,7 @@ private fun handleKeyEvent(event: KeyEvent, state: DashboardState, onAction: (Ui
                 "Escape" -> onAction(UiAction.BackToGrid)
                 "ArrowUp", "k" -> onAction(UiAction.ScrollUp)
                 "ArrowDown", "j" -> onAction(UiAction.ScrollDown)
+                "r" -> onAction(UiAction.ViewLogs)
                 else -> return false
             }
         }
