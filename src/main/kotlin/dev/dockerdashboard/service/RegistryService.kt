@@ -10,6 +10,12 @@ import java.net.URI
 
 class RegistryService {
 
+    private data class UpdateCheckResult(
+        val updateAvailable: Boolean,
+        val localDigest: String?,
+        val remoteDigest: String?,
+    )
+
     suspend fun checkForUpdates(
         containers: List<ContainerInfo>,
         dockerService: DockerService,
@@ -17,8 +23,12 @@ class RegistryService {
         containers.map { container ->
             async(Dispatchers.IO) {
                 try {
-                    val updateAvailable = isUpdateAvailable(container, dockerService)
-                    container.copy(updateAvailable = updateAvailable)
+                    val result = checkUpdate(container, dockerService)
+                    container.copy(
+                        updateAvailable = result.updateAvailable,
+                        localDigest = result.localDigest,
+                        remoteDigest = result.remoteDigest,
+                    )
                 } catch (_: Exception) {
                     container
                 }
@@ -26,19 +36,32 @@ class RegistryService {
         }.awaitAll()
     }
 
-    private fun isUpdateAvailable(container: ContainerInfo, dockerService: DockerService): Boolean {
+    private fun checkUpdate(container: ContainerInfo, dockerService: DockerService): UpdateCheckResult {
         val image = container.image
-        if (image.startsWith("sha256:")) return false
+        if (image.startsWith("sha256:")) return UpdateCheckResult(false, null, null)
 
-        val (registry, repo, tag) = parseImageReference(image) ?: return false
+        val (registry, repo, tag) = parseImageReference(image)
+            ?: return UpdateCheckResult(false, null, null)
+
+        val isLatest = tag == "latest"
 
         val localDigests = dockerService.getLocalImageDigests(container.imageId)
-        if (localDigests.isEmpty()) return false
+        if (localDigests.isEmpty()) return UpdateCheckResult(false, null, null)
 
-        val remoteDigest = fetchRemoteDigest(registry, repo, tag) ?: return false
+        val localDigest = localDigests.firstOrNull()
+            ?.substringAfter("@", "")
+            ?.takeIf { it.isNotEmpty() }
 
-        // Compare: local RepoDigests are like "nginx@sha256:abc..."
-        return localDigests.none { it.contains(remoteDigest) }
+        val remoteDigest = fetchRemoteDigest(registry, repo, tag)
+            ?: return UpdateCheckResult(false, localDigest.takeIf { isLatest }, null)
+
+        val updateAvailable = localDigests.none { it.contains(remoteDigest) }
+
+        return UpdateCheckResult(
+            updateAvailable = updateAvailable,
+            localDigest = localDigest.takeIf { isLatest },
+            remoteDigest = remoteDigest.takeIf { isLatest && updateAvailable },
+        )
     }
 
     private fun fetchRemoteDigest(registry: String, repo: String, tag: String): String? {

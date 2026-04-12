@@ -29,8 +29,14 @@ class DashboardStore(
     var state by mutableStateOf(DashboardState())
         private set
 
+    private data class UpdateInfo(
+        val updateAvailable: Boolean,
+        val localDigest: String?,
+        val remoteDigest: String?,
+    )
+
     @Volatile
-    private var updateAvailableIds: Set<String> = emptySet()
+    private var updateInfoMap: Map<String, UpdateInfo> = emptyMap()
     private var errorClearJob: Job? = null
 
     fun start() {
@@ -168,9 +174,14 @@ class DashboardStore(
                         } else {
                             s.selectedIndex
                         }
-                        val knownUpdates = updateAvailableIds
+                        val knownInfo = updateInfoMap
                         val merged = withStats.map { c ->
-                            c.copy(updateAvailable = c.id in knownUpdates)
+                            val info = knownInfo[c.id]
+                            c.copy(
+                                updateAvailable = info?.updateAvailable ?: false,
+                                localDigest = info?.localDigest,
+                                remoteDigest = info?.remoteDigest,
+                            )
                         }
                         s.copy(
                             containers = merged,
@@ -201,10 +212,17 @@ class DashboardStore(
                     val current = state.containers
                     if (current.isNotEmpty()) {
                         val checked = registryService.checkForUpdates(current, dockerService)
-                        updateAvailableIds = checked.filter { it.updateAvailable }.map { it.id }.toSet()
+                        updateInfoMap = checked.associate { c ->
+                            c.id to UpdateInfo(c.updateAvailable, c.localDigest, c.remoteDigest)
+                        }
                         state = state.let { s ->
                             s.copy(containers = s.containers.map { c ->
-                                c.copy(updateAvailable = c.id in updateAvailableIds)
+                                val info = updateInfoMap[c.id]
+                                c.copy(
+                                    updateAvailable = info?.updateAvailable ?: false,
+                                    localDigest = info?.localDigest,
+                                    remoteDigest = info?.remoteDigest,
+                                )
                             })
                         }
                     }

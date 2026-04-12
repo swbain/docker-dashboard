@@ -67,7 +67,26 @@ fun ContainerCard(
             )
 
             // Image
-            Text(container.image.take(cardWidth - 4))
+            val contentWidth = cardWidth - 4
+            Text(container.image.take(contentWidth))
+
+            // Version digest for "latest" tagged images
+            if (isLatestTag(container.image) && container.localDigest != null) {
+                val versionText = buildAnnotatedString {
+                    pushStyle(SpanStyle(color = Color(100, 180, 255)))
+                    append(shortDigest(container.localDigest))
+                    pop()
+                    if (container.updateAvailable && container.remoteDigest != null) {
+                        pushStyle(SpanStyle(color = Color.Yellow))
+                        append(" \u2192 ")
+                        pop()
+                        pushStyle(SpanStyle(color = Color.Green))
+                        append(shortDigest(container.remoteDigest))
+                        pop()
+                    }
+                }
+                Text(versionText)
+            }
 
             // Status
             Text(container.status.take(cardWidth - 4), color = stateColor)
@@ -133,5 +152,16 @@ private fun DrawScope.drawBorder(color: Color) {
     }
 }
 
-const val CARD_HEIGHT = 8
+private fun isLatestTag(image: String): Boolean {
+    val lastColon = image.lastIndexOf(':')
+    val lastSlash = image.lastIndexOf('/')
+    if (lastColon <= lastSlash || lastColon <= 0) return true
+    return image.substring(lastColon + 1) == "latest"
+}
+
+private fun shortDigest(digest: String): String {
+    return digest.substringAfter("sha256:", digest).take(8)
+}
+
+const val CARD_HEIGHT = 9
 const val MIN_CARD_WIDTH = 36

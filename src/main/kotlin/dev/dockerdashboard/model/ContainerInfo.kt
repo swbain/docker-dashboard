@@ -12,6 +12,8 @@ data class ContainerInfo(
     val memoryUsageMb: Double = 0.0,
     val memoryLimitMb: Double = 0.0,
     val updateAvailable: Boolean = false,
+    val localDigest: String? = null,
+    val remoteDigest: String? = null,
     val created: Long = 0L,
 )
 
