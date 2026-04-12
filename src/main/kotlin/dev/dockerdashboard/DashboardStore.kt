@@ -29,6 +29,8 @@ class DashboardStore(
     var state by mutableStateOf(DashboardState())
         private set
 
+    @Volatile
+    private var updateAvailableIds: Set<String> = emptySet()
     private var errorClearJob: Job? = null
 
     fun start() {
@@ -166,8 +168,12 @@ class DashboardStore(
                         } else {
                             s.selectedIndex
                         }
+                        val knownUpdates = updateAvailableIds
+                        val merged = withStats.map { c ->
+                            c.copy(updateAvailable = c.id in knownUpdates)
+                        }
                         s.copy(
-                            containers = withStats,
+                            containers = merged,
                             isConnected = true,
                             lastRefresh = LocalTime.now().format(
                                 DateTimeFormatter.ofPattern("HH:mm:ss"),
@@ -194,8 +200,13 @@ class DashboardStore(
                 try {
                     val current = state.containers
                     if (current.isNotEmpty()) {
-                        val updated = registryService.checkForUpdates(current, dockerService)
-                        state = state.copy(containers = updated)
+                        val checked = registryService.checkForUpdates(current, dockerService)
+                        updateAvailableIds = checked.filter { it.updateAvailable }.map { it.id }.toSet()
+                        state = state.let { s ->
+                            s.copy(containers = s.containers.map { c ->
+                                c.copy(updateAvailable = c.id in updateAvailableIds)
+                            })
+                        }
                     }
                 } catch (_: Exception) {}
                 delay(60_000)

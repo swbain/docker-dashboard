@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A terminal-based Docker container dashboard built with Kotlin and [Mosaic](https://github.com/JakeWharton/mosaic) (Compose-based TUI framework). It displays running/stopped containers in a grid, shows CPU/memory stats, checks Docker Hub for image updates, and allows start/stop/pull-and-recreate operations — all from the terminal.
+A terminal-based Docker container dashboard built with Kotlin and [Mosaic](https://github.com/JakeWharton/mosaic) (Compose-based TUI framework). It displays running/stopped containers in a grid, shows CPU/memory stats, checks container registries for image updates, and allows start/stop/pull-and-recreate operations — all from the terminal.
 
 ## Build & Run
 
@@ -24,7 +24,7 @@ Gradle 8.12, Kotlin 2.1.0, JVM toolchain 17. No test suite exists yet.
 
 **Services (`service/`):**
 - `DockerService` — wraps `docker-java` client. Handles container listing, one-shot stats collection (CPU/memory via `CountDownLatch` callback pattern), start/stop, and `recreateContainer` (stop → remove → pull → create with same config → reconnect networks → start).
-- `RegistryService` — checks Docker Hub for image updates by comparing local `RepoDigests` against remote manifest digests. Uses raw `HttpURLConnection` + regex for token parsing (no JSON library). Only supports Docker Hub images.
+- `RegistryService` — checks registries for image updates by comparing local `RepoDigests` against remote manifest digests via the v2 registry API with WWW-Authenticate challenge flow. Uses raw `HttpURLConnection` + regex for token/auth parsing (no JSON library). Supports Docker Hub and any v2-compatible registry (ghcr.io, lscr.io, quay.io, etc.).
 
 **UI (`ui/`):**
 - `DashboardApp` — root composable, owns keyboard event handling and layout. Key bindings: arrows/hjkl navigate, `s` start/stop, `u` pull-and-restart, `y`/`n` confirm/cancel, `q` quit.

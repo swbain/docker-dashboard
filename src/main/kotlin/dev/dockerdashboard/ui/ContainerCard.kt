@@ -28,7 +28,11 @@ fun ContainerCard(
     cardWidth: Int,
     modifier: Modifier = Modifier,
 ) {
-    val borderColor = if (isSelected) Color.Cyan else GRAY
+    val borderColor = when {
+        isSelected -> Color.Cyan
+        container.updateAvailable -> Color.Yellow
+        else -> GRAY
+    }
     val stateColor = when (container.state) {
         ContainerState.RUNNING -> Color.Green
         ContainerState.PAUSED -> Color.Yellow
@@ -46,24 +50,24 @@ fun ContainerCard(
             .padding(left = 2, right = 2, top = 1, bottom = 1)
     ) {
         Column {
-            // Container name
+            // Container name + update arrow
+            val nameText = buildAnnotatedString {
+                append(container.name.take(cardWidth - if (container.updateAvailable) 6 else 4))
+                if (container.updateAvailable) {
+                    append(" ")
+                    pushStyle(SpanStyle(color = Color.Yellow, textStyle = TextStyle.Bold))
+                    append("↑")
+                    pop()
+                }
+            }
             Text(
-                container.name.take(cardWidth - 4),
+                nameText,
                 color = if (isSelected) Color.White else LIGHT_GRAY,
                 textStyle = TextStyle.Bold,
             )
 
-            // Image + update indicator
-            val imageText = buildAnnotatedString {
-                append(container.image.take(cardWidth - 14))
-                if (container.updateAvailable) {
-                    append(" ")
-                    pushStyle(SpanStyle(color = Color.Yellow, textStyle = TextStyle.Bold))
-                    append("[UPDATE]")
-                    pop()
-                }
-            }
-            Text(imageText)
+            // Image
+            Text(container.image.take(cardWidth - 4))
 
             // Status
             Text(container.status.take(cardWidth - 4), color = stateColor)

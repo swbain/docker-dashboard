@@ -5,7 +5,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URI
 
@@ -31,30 +30,52 @@ class RegistryService {
         val image = container.image
         if (image.startsWith("sha256:")) return false
 
-        val parsed = parseDockerHubImage(image) ?: return false
-        val (namespace, repo, tag) = parsed
+        val (registry, repo, tag) = parseImageReference(image) ?: return false
 
         val localDigests = dockerService.getLocalImageDigests(container.imageId)
         if (localDigests.isEmpty()) return false
 
-        val remoteDigest = fetchRemoteDigest(namespace, repo, tag) ?: return false
+        val remoteDigest = fetchRemoteDigest(registry, repo, tag) ?: return false
 
         // Compare: local RepoDigests are like "nginx@sha256:abc..."
         return localDigests.none { it.contains(remoteDigest) }
     }
 
-    private fun fetchRemoteDigest(namespace: String, repo: String, tag: String): String? {
-        val token = getAuthToken(namespace, repo) ?: return null
-        val url = URI("https://registry-1.docker.io/v2/$namespace/$repo/manifests/$tag").toURL()
-        val conn = url.openConnection() as HttpURLConnection
+    private fun fetchRemoteDigest(registry: String, repo: String, tag: String): String? {
+        val manifestUrl = "https://$registry/v2/$repo/manifests/$tag"
+
+        // Phase 1: Unauthenticated HEAD — some registries allow this
+        val conn = URI(manifestUrl).toURL().openConnection() as HttpURLConnection
+        try {
+            conn.requestMethod = "HEAD"
+            conn.setRequestProperty("Accept", MANIFEST_ACCEPT)
+            conn.connectTimeout = 5000
+            conn.readTimeout = 5000
+            conn.instanceFollowRedirects = true
+            conn.connect()
+
+            if (conn.responseCode == 200) {
+                return conn.getHeaderField("Docker-Content-Digest")
+            }
+            if (conn.responseCode != 401) return null
+
+            // Phase 2: Parse WWW-Authenticate challenge and fetch token
+            val wwwAuth = conn.getHeaderField("WWW-Authenticate") ?: return null
+            val token = getAuthTokenFromChallenge(wwwAuth) ?: return null
+
+            // Phase 3: Retry with Bearer token
+            return fetchDigestWithToken(manifestUrl, token)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    private fun fetchDigestWithToken(manifestUrl: String, token: String): String? {
+        val conn = URI(manifestUrl).toURL().openConnection() as HttpURLConnection
         return try {
             conn.requestMethod = "HEAD"
             conn.setRequestProperty("Authorization", "Bearer $token")
-            conn.setRequestProperty(
-                "Accept",
-                "application/vnd.docker.distribution.manifest.v2+json, " +
-                    "application/vnd.oci.image.manifest.v1+json"
-            )
+            conn.setRequestProperty("Accept", MANIFEST_ACCEPT)
             conn.connectTimeout = 5000
             conn.readTimeout = 5000
             conn.instanceFollowRedirects = true
@@ -69,19 +90,33 @@ class RegistryService {
         }
     }
 
-    private fun getAuthToken(namespace: String, repo: String): String? {
-        val url = URI(
-            "https://auth.docker.io/token?service=registry.docker.io&scope=repository:$namespace/$repo:pull"
-        ).toURL()
-        val conn = url.openConnection() as HttpURLConnection
+    private fun getAuthTokenFromChallenge(wwwAuthenticate: String): String? {
+        if (!wwwAuthenticate.startsWith("Bearer ", ignoreCase = true)) return null
+
+        val params = wwwAuthenticate.substring(7)
+        val paramRegex = """(\w+)="([^"]*)"""".toRegex()
+        val paramMap = paramRegex.findAll(params).associate { it.groupValues[1] to it.groupValues[2] }
+
+        val realm = paramMap["realm"] ?: return null
+        val queryParts = mutableListOf<String>()
+        paramMap["service"]?.let { queryParts.add("service=$it") }
+        paramMap["scope"]?.let { queryParts.add("scope=$it") }
+
+        val separator = if ("?" in realm) "&" else "?"
+        val tokenUrl = if (queryParts.isNotEmpty()) {
+            "$realm$separator${queryParts.joinToString("&")}"
+        } else {
+            realm
+        }
+
+        val conn = URI(tokenUrl).toURL().openConnection() as HttpURLConnection
         return try {
             conn.connectTimeout = 5000
             conn.readTimeout = 5000
             conn.connect()
             if (conn.responseCode == 200) {
                 val body = conn.inputStream.bufferedReader().readText()
-                // Simple JSON parsing — extract "token":"..." without a JSON library
-                val tokenRegex = """"token"\s*:\s*"([^"]+)"""".toRegex()
+                val tokenRegex = """"(?:token|access_token)"\s*:\s*"([^"]+)"""".toRegex()
                 tokenRegex.find(body)?.groupValues?.get(1)
             } else {
                 null
@@ -92,18 +127,18 @@ class RegistryService {
     }
 
     companion object {
-        /**
-         * Parse a Docker image reference into (namespace, repo, tag) for Docker Hub images.
-         * Returns null for non-Docker Hub images.
-         */
-        fun parseDockerHubImage(image: String): Triple<String, String, String>? {
-            // Skip images with explicit non-Docker Hub registries
-            val parts = image.split("/")
-            if (parts.size >= 2 && parts[0].contains(".")) {
-                // Has a registry prefix like ghcr.io, quay.io, etc.
-                return null
-            }
+        private val MANIFEST_ACCEPT = listOf(
+            "application/vnd.docker.distribution.manifest.v2+json",
+            "application/vnd.oci.image.manifest.v1+json",
+            "application/vnd.docker.distribution.manifest.list.v2+json",
+            "application/vnd.oci.image.index.v1+json",
+        ).joinToString(", ")
 
+        /**
+         * Parse a Docker image reference into (registry, repo, tag).
+         * Returns null for unparseable references.
+         */
+        fun parseImageReference(image: String): Triple<String, String, String>? {
             val (ref, tag) = run {
                 val lastColon = image.lastIndexOf(':')
                 val lastSlash = image.lastIndexOf('/')
@@ -114,13 +149,17 @@ class RegistryService {
                 }
             }
 
+            val parts = ref.split("/")
             return when {
-                // Official images: "nginx", "nginx:latest"
-                !ref.contains("/") -> Triple("library", ref, tag)
-                // User images: "user/repo", "user/repo:tag"
-                ref.count { it == '/' } == 1 -> {
-                    val (namespace, repo) = ref.split("/")
-                    Triple(namespace, repo, tag)
+                // Official Docker Hub images: "nginx", "nginx:latest"
+                parts.size == 1 -> Triple("registry-1.docker.io", "library/${parts[0]}", tag)
+                // Docker Hub user images: "user/repo" (no dot in first segment)
+                parts.size == 2 && !parts[0].contains(".") ->
+                    Triple("registry-1.docker.io", ref, tag)
+                // Explicit registry: "lscr.io/linuxserver/plex", "ghcr.io/org/repo"
+                parts[0].contains(".") -> {
+                    val repo = parts.drop(1).joinToString("/")
+                    Triple(parts[0], repo, tag)
                 }
                 else -> null
             }
