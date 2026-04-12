@@ -22,9 +22,12 @@ fun TopStatusBar(
     containerCount: Int,
     runningCount: Int,
     isConnected: Boolean,
+    isInitialLoading: Boolean,
     lastRefresh: String,
     modifier: Modifier = Modifier,
 ) {
+    val spinner = rememberSpinner(isInitialLoading)
+
     Row(
         modifier = modifier.fillMaxWidth().background(BAR_BG).padding(horizontal = 1),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -34,16 +37,25 @@ fun TopStatusBar(
             append("Docker Dashboard")
             pop()
             append("  ")
-            if (isConnected) {
-                pushStyle(SpanStyle(color = Color.Green))
-                append("●")
-                pop()
-                append(" Connected")
-            } else {
-                pushStyle(SpanStyle(color = Color.Red))
-                append("●")
-                pop()
-                append(" Disconnected")
+            when {
+                isInitialLoading -> {
+                    pushStyle(SpanStyle(color = Color.Yellow))
+                    append("$spinner")
+                    pop()
+                    append(" Connecting...")
+                }
+                isConnected -> {
+                    pushStyle(SpanStyle(color = Color.Green))
+                    append("●")
+                    pop()
+                    append(" Connected")
+                }
+                else -> {
+                    pushStyle(SpanStyle(color = Color.Red))
+                    append("●")
+                    pop()
+                    append(" Disconnected")
+                }
             }
         }
         Text(title)
@@ -82,6 +94,7 @@ fun BottomActionBar(
                     is ActiveOperation.Restarting -> "Restarting ${activeOperation.containerName}..."
                     is ActiveOperation.Stopping -> "Stopping ${activeOperation.containerName}..."
                     is ActiveOperation.Starting -> "Starting ${activeOperation.containerName}..."
+                    is ActiveOperation.Creating -> "Creating container for ${activeOperation.containerName}..."
                 }
                 Text(msg, color = Color.Yellow)
             }

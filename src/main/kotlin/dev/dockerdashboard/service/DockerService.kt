@@ -2,6 +2,9 @@ package dev.dockerdashboard.service
 
 import com.github.dockerjava.api.DockerClient
 import com.github.dockerjava.api.async.ResultCallback
+import com.github.dockerjava.api.model.ContainerNetwork
+import com.github.dockerjava.api.model.ExposedPort
+import com.github.dockerjava.api.model.HostConfig
 import com.github.dockerjava.api.model.Statistics
 import com.github.dockerjava.core.DefaultDockerClientConfig
 import com.github.dockerjava.core.DockerClientImpl
@@ -118,35 +121,42 @@ class DockerService : Closeable {
         client.startContainerCmd(containerId).exec()
     }
 
-    suspend fun recreateContainer(containerId: String): Unit = withContext(Dispatchers.IO) {
+    suspend fun inspectAndStop(containerId: String): RecreateParams = withContext(Dispatchers.IO) {
         val inspect = client.inspectContainerCmd(containerId).exec()
         val config = inspect.config ?: throw RuntimeException("No config for container $containerId")
         val hostConfig = inspect.hostConfig
         val name = inspect.name?.removePrefix("/") ?: throw RuntimeException("No name for container")
         val image = config.image ?: throw RuntimeException("No image for container")
 
-        // Stop and remove
         try { client.stopContainerCmd(containerId).withTimeout(10).exec() } catch (_: Exception) {}
         client.removeContainerCmd(containerId).withForce(true).exec()
 
-        // Pull latest
-        pullImage(image)
+        RecreateParams(
+            name = name,
+            image = image,
+            env = config.env,
+            labels = config.labels,
+            exposedPorts = config.exposedPorts,
+            entrypoint = config.entrypoint,
+            cmd = config.cmd,
+            hostConfig = hostConfig,
+            networks = inspect.networkSettings?.networks,
+        )
+    }
 
-        // Recreate with same config
-        val createCmd = client.createContainerCmd(image).withName(name)
+    suspend fun recreateFromParams(params: RecreateParams): String = withContext(Dispatchers.IO) {
+        val createCmd = client.createContainerCmd(params.image).withName(params.name)
 
-        config.env?.let { createCmd.withEnv(*it) }
-        config.labels?.let { createCmd.withLabels(it) }
-        config.exposedPorts?.let { createCmd.withExposedPorts(*it) }
-        config.entrypoint?.let { createCmd.withEntrypoint(*it) }
-        config.cmd?.let { createCmd.withCmd(*it) }
-        hostConfig?.let { createCmd.withHostConfig(it) }
+        params.env?.let { createCmd.withEnv(*it) }
+        params.labels?.let { createCmd.withLabels(it) }
+        params.exposedPorts?.let { createCmd.withExposedPorts(*it) }
+        params.entrypoint?.let { createCmd.withEntrypoint(*it) }
+        params.cmd?.let { createCmd.withCmd(*it) }
+        params.hostConfig?.let { createCmd.withHostConfig(it) }
 
         val newContainer = createCmd.exec()
 
-        // Reconnect to networks (beyond default)
-        val networkSettings = inspect.networkSettings?.networks
-        networkSettings?.forEach { (networkName, network) ->
+        params.networks?.forEach { (networkName, network) ->
             if (networkName != "bridge" && networkName != "host" && networkName != "none") {
                 val networkId = network.networkID ?: return@forEach
                 try {
@@ -158,7 +168,7 @@ class DockerService : Closeable {
             }
         }
 
-        client.startContainerCmd(newContainer.id).exec()
+        newContainer.id
     }
 
     fun getLocalImageDigests(imageId: String): List<String> {
@@ -186,3 +196,15 @@ class DockerService : Closeable {
         }
     }
 }
+
+data class RecreateParams(
+    val name: String,
+    val image: String,
+    val env: Array<String>?,
+    val labels: Map<String, String>?,
+    val exposedPorts: Array<ExposedPort>?,
+    val entrypoint: Array<String>?,
+    val cmd: Array<String>?,
+    val hostConfig: HostConfig?,
+    val networks: Map<String, ContainerNetwork>?,
+)

@@ -42,8 +42,10 @@ enum class ContainerState(val display: String) {
 }
 
 sealed interface ActiveOperation {
-    data class Pulling(val containerName: String) : ActiveOperation
-    data class Restarting(val containerName: String) : ActiveOperation
-    data class Stopping(val containerName: String) : ActiveOperation
-    data class Starting(val containerName: String) : ActiveOperation
+    val containerName: String
+    data class Pulling(override val containerName: String) : ActiveOperation
+    data class Restarting(override val containerName: String) : ActiveOperation
+    data class Stopping(override val containerName: String) : ActiveOperation
+    data class Starting(override val containerName: String) : ActiveOperation
+    data class Creating(override val containerName: String) : ActiveOperation
 }

@@ -144,10 +144,27 @@ class DashboardStore(
             is PendingConfirmation.PullAndRestart -> {
                 scope.launch(Dispatchers.IO) {
                     try {
+                        val name = pending.containerName
+
                         state = state.copy(
-                            activeOperation = ActiveOperation.Pulling(pending.containerName),
+                            activeOperation = ActiveOperation.Stopping(name),
                         )
-                        dockerService.recreateContainer(pending.containerId)
+                        val params = dockerService.inspectAndStop(pending.containerId)
+
+                        state = state.copy(
+                            activeOperation = ActiveOperation.Pulling(name),
+                        )
+                        dockerService.pullImage(params.image)
+
+                        state = state.copy(
+                            activeOperation = ActiveOperation.Creating(name),
+                        )
+                        val newId = dockerService.recreateFromParams(params)
+
+                        state = state.copy(
+                            activeOperation = ActiveOperation.Starting(name),
+                        )
+                        dockerService.startContainer(newId)
                     } catch (e: Exception) {
                         setError("Update failed: ${e.message?.take(50)}")
                     } finally {
@@ -186,6 +203,7 @@ class DashboardStore(
                         s.copy(
                             containers = merged,
                             isConnected = true,
+                            isInitialLoading = false,
                             lastRefresh = LocalTime.now().format(
                                 DateTimeFormatter.ofPattern("HH:mm:ss"),
                             ),
@@ -195,6 +213,7 @@ class DashboardStore(
                 } catch (e: Exception) {
                     state = state.copy(
                         isConnected = false,
+                        isInitialLoading = false,
                         errorMessage = "Docker error: ${e.message?.take(60)}",
                     )
                     scheduleErrorClear()

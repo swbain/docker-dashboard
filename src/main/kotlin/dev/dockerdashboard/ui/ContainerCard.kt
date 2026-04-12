@@ -15,6 +15,7 @@ import com.jakewharton.mosaic.ui.Color
 import com.jakewharton.mosaic.ui.Column
 import com.jakewharton.mosaic.ui.Text
 import com.jakewharton.mosaic.ui.TextStyle
+import dev.dockerdashboard.model.ActiveOperation
 import dev.dockerdashboard.model.ContainerInfo
 import dev.dockerdashboard.model.ContainerState
 
@@ -26,9 +27,13 @@ fun ContainerCard(
     container: ContainerInfo,
     isSelected: Boolean,
     cardWidth: Int,
+    activeOperation: ActiveOperation? = null,
     modifier: Modifier = Modifier,
 ) {
+    val isUpdating = activeOperation != null && activeOperation.containerName == container.name
+
     val borderColor = when {
+        isUpdating -> Color.Yellow
         isSelected -> Color.Cyan
         container.updateAvailable -> Color.Yellow
         else -> GRAY
@@ -41,6 +46,8 @@ fun ContainerCard(
         ContainerState.CREATED -> Color.Blue
         else -> LIGHT_GRAY
     }
+
+    val spinnerChar = rememberSpinner(isUpdating)
 
     Box(
         modifier = modifier
@@ -70,56 +77,81 @@ fun ContainerCard(
             val contentWidth = cardWidth - 4
             Text(container.image.take(contentWidth))
 
-            // Version digest for "latest" tagged images
-            if (isLatestTag(container.image) && container.localDigest != null) {
-                val versionText = buildAnnotatedString {
-                    pushStyle(SpanStyle(color = Color(100, 180, 255)))
-                    append(shortDigest(container.localDigest))
-                    pop()
-                    if (container.updateAvailable && container.remoteDigest != null) {
-                        pushStyle(SpanStyle(color = Color.Yellow))
-                        append(" \u2192 ")
+            if (isUpdating) {
+                val phaseText = when (activeOperation) {
+                    is ActiveOperation.Stopping -> "Stopping\u2026"
+                    is ActiveOperation.Pulling -> "Pulling image\u2026"
+                    is ActiveOperation.Creating -> "Creating\u2026"
+                    is ActiveOperation.Starting -> "Starting\u2026"
+                    else -> "Working\u2026"
+                }
+                val line = "$spinnerChar $phaseText"
+                val padding = ((contentWidth - line.length) / 2).coerceAtLeast(0)
+
+                Text("")
+                Text(
+                    buildAnnotatedString {
+                        append(" ".repeat(padding))
+                        pushStyle(SpanStyle(color = Color.Yellow, textStyle = TextStyle.Bold))
+                        append("$spinnerChar ")
                         pop()
-                        pushStyle(SpanStyle(color = Color.Green))
-                        append(shortDigest(container.remoteDigest))
+                        pushStyle(SpanStyle(color = Color.White))
+                        append(phaseText)
                         pop()
                     }
+                )
+            } else {
+                // Version digest for "latest" tagged images
+                if (isLatestTag(container.image) && container.localDigest != null) {
+                    val versionText = buildAnnotatedString {
+                        pushStyle(SpanStyle(color = Color(100, 180, 255)))
+                        append(shortDigest(container.localDigest))
+                        pop()
+                        if (container.updateAvailable && container.remoteDigest != null) {
+                            pushStyle(SpanStyle(color = Color.Yellow))
+                            append(" \u2192 ")
+                            pop()
+                            pushStyle(SpanStyle(color = Color.Green))
+                            append(shortDigest(container.remoteDigest))
+                            pop()
+                        }
+                    }
+                    Text(versionText)
                 }
-                Text(versionText)
-            }
 
-            // Status
-            Text(container.status.take(cardWidth - 4), color = stateColor)
+                // Status
+                Text(container.status.take(cardWidth - 4), color = stateColor)
 
-            // Ports
-            if (container.ports.isNotEmpty()) {
-                Text(container.ports.take(cardWidth - 4), color = GRAY)
-            }
+                // Ports
+                if (container.ports.isNotEmpty()) {
+                    Text(container.ports.take(cardWidth - 4), color = GRAY)
+                }
 
-            // Resources (running containers only)
-            if (container.state == ContainerState.RUNNING && container.memoryLimitMb > 0) {
-                val resourceText = buildAnnotatedString {
-                    pushStyle(SpanStyle(color = LIGHT_GRAY))
-                    append("CPU: ")
-                    pop()
-                    pushStyle(SpanStyle(color = Color.White))
-                    append(String.format("%.1f%%", container.cpuPercent))
-                    pop()
-                    append("  ")
-                    pushStyle(SpanStyle(color = LIGHT_GRAY))
-                    append("MEM: ")
-                    pop()
-                    pushStyle(SpanStyle(color = Color.White))
-                    append(
-                        String.format(
-                            "%.0f/%.0fMB",
-                            container.memoryUsageMb,
-                            container.memoryLimitMb
+                // Resources (running containers only)
+                if (container.state == ContainerState.RUNNING && container.memoryLimitMb > 0) {
+                    val resourceText = buildAnnotatedString {
+                        pushStyle(SpanStyle(color = LIGHT_GRAY))
+                        append("CPU: ")
+                        pop()
+                        pushStyle(SpanStyle(color = Color.White))
+                        append(String.format("%.1f%%", container.cpuPercent))
+                        pop()
+                        append("  ")
+                        pushStyle(SpanStyle(color = LIGHT_GRAY))
+                        append("MEM: ")
+                        pop()
+                        pushStyle(SpanStyle(color = Color.White))
+                        append(
+                            String.format(
+                                "%.0f/%.0fMB",
+                                container.memoryUsageMb,
+                                container.memoryLimitMb
+                            )
                         )
-                    )
-                    pop()
+                        pop()
+                    }
+                    Text(resourceText)
                 }
-                Text(resourceText)
             }
         }
     }
