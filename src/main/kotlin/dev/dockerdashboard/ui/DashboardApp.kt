@@ -10,9 +10,8 @@ import com.jakewharton.mosaic.ui.Box
 import com.jakewharton.mosaic.ui.Color
 import com.jakewharton.mosaic.ui.Column
 import com.jakewharton.mosaic.ui.Text
-import dev.dockerdashboard.model.ActiveOperation
-import dev.dockerdashboard.model.ContainerInfo
 import dev.dockerdashboard.model.ContainerState
+import dev.dockerdashboard.model.DashboardState
 import kotlin.math.max
 
 enum class Direction { UP, DOWN, LEFT, RIGHT }
@@ -28,14 +27,7 @@ sealed interface UiAction {
 
 @Composable
 fun DashboardApp(
-    containers: List<ContainerInfo>,
-    selectedIndex: Int,
-    activeOperation: ActiveOperation?,
-    errorMessage: String?,
-    lastRefresh: String,
-    isConnected: Boolean,
-    pendingConfirm: String?,
-    scrollOffset: Int,
+    state: DashboardState,
     maxVisibleRows: Int,
     onAction: (UiAction) -> Unit,
 ) {
@@ -44,6 +36,10 @@ fun DashboardApp(
 
     val columns = max(1, termWidth / MIN_CARD_WIDTH)
     val cardWidth = termWidth / columns
+
+    val containers = state.containers
+    val totalRows = if (containers.isNotEmpty()) (containers.size + columns - 1) / columns else 0
+    val scrollOffset = state.scrollOffset.coerceIn(0, (totalRows - maxVisibleRows).coerceAtLeast(0))
 
     Box(
         modifier = Modifier
@@ -55,22 +51,21 @@ fun DashboardApp(
             TopStatusBar(
                 containerCount = containers.size,
                 runningCount = containers.count { it.state == ContainerState.RUNNING },
-                isConnected = isConnected,
-                lastRefresh = lastRefresh,
+                isConnected = state.isConnected,
+                lastRefresh = state.lastRefresh,
             )
 
-            if (containers.isEmpty() && isConnected) {
+            if (containers.isEmpty() && state.isConnected) {
                 Text(
                     "  No containers found.",
                     color = Color(140, 140, 140),
                 )
-            } else if (!isConnected) {
+            } else if (!state.isConnected) {
                 Text(
                     "  Cannot connect to Docker. Is the Docker daemon running?",
                     color = Color.Red,
                 )
             } else {
-                val totalRows = (containers.size + columns - 1) / columns
                 // Scroll indicator: above
                 if (scrollOffset > 0) {
                     Text("  ▲ ${scrollOffset} more row(s) above", color = Color(140, 140, 140))
@@ -79,7 +74,7 @@ fun DashboardApp(
                 // Container grid
                 ContainerGrid(
                     containers = containers,
-                    selectedIndex = selectedIndex,
+                    selectedIndex = state.selectedIndex,
                     columns = columns,
                     cardWidth = cardWidth,
                     scrollOffset = scrollOffset,
@@ -94,12 +89,13 @@ fun DashboardApp(
             }
 
             // Bottom bar
-            if (pendingConfirm != null) {
-                ConfirmBar(pendingConfirm)
+            val pendingMessage = state.pendingConfirmation?.message
+            if (pendingMessage != null) {
+                ConfirmBar(pendingMessage)
             } else {
                 BottomActionBar(
-                    activeOperation = activeOperation,
-                    errorMessage = errorMessage,
+                    activeOperation = state.activeOperation,
+                    errorMessage = state.errorMessage,
                 )
             }
         }
