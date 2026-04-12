@@ -12,6 +12,7 @@ import com.github.dockerjava.transport.DockerHttpClient
 import com.github.dockerjava.httpclient5.ApacheDockerHttpClient
 import dev.dockerdashboard.model.ContainerInfo
 import dev.dockerdashboard.model.ContainerState
+import dev.dockerdashboard.model.VolumeMount
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -50,6 +51,28 @@ class DockerService : Closeable {
                 ?.joinToString(", ") { "${it.publicPort}->${it.privatePort}/${it.type}" }
                 ?: ""
 
+            val labels = container.labels ?: emptyMap()
+            val composeProject = labels["com.docker.compose.project"]
+            val composeService = labels["com.docker.compose.service"]
+
+            val volumes = container.mounts?.map { mount ->
+                VolumeMount(
+                    source = mount.source ?: "",
+                    destination = mount.destination ?: "",
+                    mode = mount.mode ?: "rw",
+                )
+            } ?: emptyList()
+
+            // Parse health status from the status string (e.g. "Up 2 hours (healthy)")
+            val healthStatus = when {
+                container.status?.contains("(healthy)") == true -> "healthy"
+                container.status?.contains("(unhealthy)") == true -> "unhealthy"
+                container.status?.contains("(health: starting)") == true -> "starting"
+                else -> null
+            }
+
+            val networkNames = container.networkSettings?.networks?.keys?.toList() ?: emptyList()
+
             ContainerInfo(
                 id = container.id,
                 name = name,
@@ -59,6 +82,12 @@ class DockerService : Closeable {
                 state = ContainerState.fromString(container.state ?: "unknown"),
                 ports = ports,
                 created = container.created ?: 0L,
+                healthStatus = healthStatus,
+                volumes = volumes,
+                composeProject = composeProject,
+                composeService = composeService,
+                labels = labels,
+                networks = networkNames,
             )
         }
     }
@@ -178,6 +207,55 @@ class DockerService : Closeable {
         } catch (_: Exception) {
             emptyList()
         }
+    }
+
+    // --- Stubs for feature teammates ---
+
+    suspend fun getContainerLogs(containerId: String, tail: Int = 200): List<String> {
+        // Teammate A implements
+        return emptyList()
+    }
+
+    data class ContainerDetail(
+        val id: String,
+        val name: String,
+        val image: String,
+        val status: String,
+        val created: String,
+        val command: String,
+        val entrypoint: String,
+        val restartPolicy: String,
+        val env: List<String>,
+        val networks: List<String>,
+        val volumes: List<VolumeMount>,
+        val labels: Map<String, String>,
+        val exitCode: Int?,
+    )
+
+    suspend fun inspectContainerDetail(containerId: String): ContainerDetail {
+        // Teammate B implements
+        return ContainerDetail(
+            id = containerId,
+            name = "",
+            image = "",
+            status = "",
+            created = "",
+            command = "",
+            entrypoint = "",
+            restartPolicy = "",
+            env = emptyList(),
+            networks = emptyList(),
+            volumes = emptyList(),
+            labels = emptyMap(),
+            exitCode = null,
+        )
+    }
+
+    data class PruneResult(val count: Int, val spaceFreedMb: Long)
+
+    suspend fun pruneImages(): PruneResult {
+        // Teammate J implements
+        return PruneResult(0, 0)
     }
 
     override fun close() {

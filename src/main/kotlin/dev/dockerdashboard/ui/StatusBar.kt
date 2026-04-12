@@ -92,6 +92,10 @@ fun BottomActionBar(
                     is ActiveOperation.Stopping -> "Stopping ${activeOperation.containerName}..."
                     is ActiveOperation.Starting -> "Starting ${activeOperation.containerName}..."
                     is ActiveOperation.Creating -> "Creating container for ${activeOperation.containerName}..."
+                    is ActiveOperation.Pruning -> "Pruning unused images..."
+                    is ActiveOperation.BulkStopping -> "Stopping ${activeOperation.current}/${activeOperation.total}..."
+                    is ActiveOperation.BulkStarting -> "Starting ${activeOperation.current}/${activeOperation.total}..."
+                    is ActiveOperation.BulkPulling -> "Pulling ${activeOperation.current}/${activeOperation.total}..."
                 }
                 Text(msg, color = Color.Yellow)
             }

@@ -8,6 +8,7 @@ import com.jakewharton.mosaic.ui.Row
 import com.jakewharton.mosaic.ui.Spacer
 import dev.dockerdashboard.model.ActiveOperation
 import dev.dockerdashboard.model.ContainerInfo
+import dev.dockerdashboard.model.StatsSnapshot
 
 @Composable
 fun ContainerGrid(
@@ -18,6 +19,7 @@ fun ContainerGrid(
     scrollOffset: Int,
     maxVisibleRows: Int,
     activeOperation: ActiveOperation?,
+    statsHistory: Map<String, List<StatsSnapshot>> = emptyMap(),
     modifier: Modifier = Modifier,
 ) {
     val allRows = containers.chunked(columns)
@@ -32,6 +34,7 @@ fun ContainerGrid(
                         isSelected = flatIndex == selectedIndex,
                         cardWidth = cardWidth,
                         activeOperation = activeOperation,
+                        statsHistory = statsHistory[container.id] ?: emptyList(),
                     )
                 }
                 // Fill remaining columns with spacers

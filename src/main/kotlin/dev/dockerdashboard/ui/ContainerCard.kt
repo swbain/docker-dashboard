@@ -18,6 +18,7 @@ import com.jakewharton.mosaic.ui.TextStyle
 import dev.dockerdashboard.model.ActiveOperation
 import dev.dockerdashboard.model.ContainerInfo
 import dev.dockerdashboard.model.ContainerState
+import dev.dockerdashboard.model.StatsSnapshot
 
 private val GRAY = Color(100, 100, 100)
 private val LIGHT_GRAY = Color(160, 160, 160)
@@ -28,6 +29,7 @@ fun ContainerCard(
     isSelected: Boolean,
     cardWidth: Int,
     activeOperation: ActiveOperation? = null,
+    statsHistory: List<StatsSnapshot> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     val isUpdating = activeOperation != null && activeOperation.containerName == container.name

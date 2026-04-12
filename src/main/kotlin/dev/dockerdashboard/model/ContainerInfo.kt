@@ -1,5 +1,11 @@
 package dev.dockerdashboard.model
 
+data class VolumeMount(
+    val source: String,
+    val destination: String,
+    val mode: String,
+)
+
 data class ContainerInfo(
     val id: String,
     val name: String,
@@ -15,6 +21,16 @@ data class ContainerInfo(
     val localDigest: String? = null,
     val remoteDigest: String? = null,
     val created: Long = 0L,
+    val healthStatus: String? = null,
+    val volumes: List<VolumeMount> = emptyList(),
+    val composeProject: String? = null,
+    val composeService: String? = null,
+    val labels: Map<String, String> = emptyMap(),
+    val env: List<String> = emptyList(),
+    val networks: List<String> = emptyList(),
+    val restartPolicy: String? = null,
+    val command: String? = null,
+    val exitCode: Int? = null,
 )
 
 enum class ContainerState(val display: String) {
@@ -48,4 +64,8 @@ sealed interface ActiveOperation {
     data class Stopping(override val containerName: String) : ActiveOperation
     data class Starting(override val containerName: String) : ActiveOperation
     data class Creating(override val containerName: String) : ActiveOperation
+    data class Pruning(override val containerName: String = "") : ActiveOperation
+    data class BulkStopping(val current: Int, val total: Int, override val containerName: String = "") : ActiveOperation
+    data class BulkStarting(val current: Int, val total: Int, override val containerName: String = "") : ActiveOperation
+    data class BulkPulling(val current: Int, val total: Int, override val containerName: String = "") : ActiveOperation
 }

@@ -14,25 +14,37 @@ import kotlinx.coroutines.awaitCancellation
 import kotlin.math.max
 
 fun main() {
-    runMosaicBlocking {
-        val dockerService = remember { DockerService() }
-        val registryService = remember { RegistryService() }
-        val scope = rememberCoroutineScope()
-        val store = remember { DashboardStore(dockerService, registryService, scope) }
+    var execRequest: ExecRequest? = null
+    while (true) {
+        runMosaicBlocking {
+            val dockerService = remember { DockerService() }
+            val registryService = remember { RegistryService() }
+            val scope = rememberCoroutineScope()
+            val store = remember {
+                DashboardStore(dockerService, registryService, scope) { req ->
+                    execRequest = req
+                }
+            }
 
-        LaunchedEffect(Unit) { store.start() }
+            LaunchedEffect(Unit) { store.start() }
 
-        val terminal = LocalTerminalState.current
-        val columns = max(1, terminal.size.columns / MIN_CARD_WIDTH)
-        val availableHeight = terminal.size.rows - 2
-        val maxVisibleRows = max(1, availableHeight / CARD_HEIGHT)
+            val terminal = LocalTerminalState.current
+            val columns = max(1, terminal.size.columns / MIN_CARD_WIDTH)
+            val availableHeight = terminal.size.rows - 2
+            val maxVisibleRows = max(1, availableHeight / CARD_HEIGHT)
 
-        DashboardApp(
-            state = store.state,
-            maxVisibleRows = maxVisibleRows,
-            onAction = { action -> store.dispatch(action, columns, maxVisibleRows) },
-        )
+            DashboardApp(
+                state = store.state,
+                displayContainers = store.displayContainers,
+                maxVisibleRows = maxVisibleRows,
+                onAction = { action -> store.dispatch(action, columns, maxVisibleRows) },
+            )
 
-        LaunchedEffect(Unit) { awaitCancellation() }
+            LaunchedEffect(Unit) { awaitCancellation() }
+        }
+        val req = execRequest ?: break
+        execRequest = null
+        ProcessBuilder("docker", "exec", "-it", req.containerId, "/bin/sh")
+            .inheritIO().start().waitFor()
     }
 }
