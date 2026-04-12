@@ -17,8 +17,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.time.LocalTime
-import java.time.format.DateTimeFormatter
+
 import kotlin.system.exitProcess
 
 class DashboardStore(
@@ -204,9 +203,7 @@ class DashboardStore(
                             containers = merged,
                             isConnected = true,
                             isInitialLoading = false,
-                            lastRefresh = LocalTime.now().format(
-                                DateTimeFormatter.ofPattern("HH:mm:ss"),
-                            ),
+
                             selectedIndex = newIndex,
                         )
                     }

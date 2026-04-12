@@ -3,7 +3,7 @@
 A terminal-based Docker container dashboard built with Kotlin and [Mosaic](https://github.com/JakeWharton/mosaic) (Jetpack Compose for the terminal). Monitor, start, stop, and update your containers without leaving the command line.
 
 ```
-┌Docker Dashboard  ● Connected                          3/5 running  14:32:07┐
+┌Docker Dashboard  ● Connected                                  3/5 running┐
 
 ┌──────────────────────────────────┐  ┌──────────────────────────────────┐
 │ nginx-proxy                      │  │ postgres-db                      │

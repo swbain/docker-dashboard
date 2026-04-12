@@ -23,7 +23,7 @@ fun TopStatusBar(
     runningCount: Int,
     isConnected: Boolean,
     isInitialLoading: Boolean,
-    lastRefresh: String,
+
     modifier: Modifier = Modifier,
 ) {
     val spinner = rememberSpinner(isInitialLoading)
@@ -67,9 +67,6 @@ fun TopStatusBar(
             pushStyle(SpanStyle(color = Color(140, 140, 140)))
             append("/$containerCount running")
             pop()
-            if (lastRefresh.isNotEmpty()) {
-                append("  $lastRefresh")
-            }
         }
         Text(stats)
     }

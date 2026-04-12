@@ -92,7 +92,6 @@ fun DashboardApp(
                 runningCount = containers.count { it.state == ContainerState.RUNNING },
                 isConnected = state.isConnected,
                 isInitialLoading = false,
-                lastRefresh = state.lastRefresh,
             )
 
             when {

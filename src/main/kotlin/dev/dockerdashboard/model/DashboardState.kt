@@ -5,7 +5,7 @@ data class DashboardState(
     val selectedIndex: Int = 0,
     val activeOperation: ActiveOperation? = null,
     val errorMessage: String? = null,
-    val lastRefresh: String = "",
+
     val isConnected: Boolean = false,
     val isInitialLoading: Boolean = true,
     val pendingConfirmation: PendingConfirmation? = null,
