@@ -20,9 +20,6 @@ import dev.dockerdashboard.model.ContainerInfo
 import dev.dockerdashboard.model.ContainerState
 import dev.dockerdashboard.model.StatsSnapshot
 
-private val GRAY = Color(100, 100, 100)
-private val LIGHT_GRAY = Color(160, 160, 160)
-
 @Composable
 fun ContainerCard(
     container: ContainerInfo,
@@ -33,22 +30,23 @@ fun ContainerCard(
     statsHistory: List<StatsSnapshot> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
+    val theme = LocalTheme.current
     val isUpdating = activeOperation != null && activeOperation.containerName == container.name
 
     val borderColor = when {
-        isUpdating -> Color.Yellow
-        isMultiSelected -> Color.Magenta
-        isSelected -> Color.Cyan
-        container.updateAvailable -> Color.Yellow
-        else -> GRAY
+        isUpdating -> theme.warning
+        isMultiSelected -> theme.multiSelect
+        isSelected -> theme.borderSelected
+        container.updateAvailable -> theme.updateAvailable
+        else -> theme.border
     }
     val stateColor = when (container.state) {
-        ContainerState.RUNNING -> Color.Green
-        ContainerState.PAUSED -> Color.Yellow
-        ContainerState.EXITED, ContainerState.DEAD -> Color.Red
-        ContainerState.RESTARTING -> Color.Cyan
-        ContainerState.CREATED -> Color.Blue
-        else -> LIGHT_GRAY
+        ContainerState.RUNNING -> theme.statusRunning
+        ContainerState.PAUSED -> theme.statusPaused
+        ContainerState.EXITED, ContainerState.DEAD -> theme.statusStopped
+        ContainerState.RESTARTING -> theme.statusRestarting
+        ContainerState.CREATED -> theme.statusCreated
+        else -> theme.textSecondary
     }
 
     val spinnerChar = rememberSpinner(isUpdating)
@@ -63,14 +61,13 @@ fun ContainerCard(
         Column {
             // Container name + health icon + update arrow
             val nameText = buildAnnotatedString {
-                // Health icon
                 val healthIcon = container.healthStatus
                 if (healthIcon != null) {
                     val healthColor = when (healthIcon) {
-                        "healthy" -> Color.Green
-                        "unhealthy" -> Color.Red
-                        "starting" -> Color.Yellow
-                        else -> Color(160, 160, 160)
+                        "healthy" -> theme.healthHealthy
+                        "unhealthy" -> theme.healthUnhealthy
+                        "starting" -> theme.healthStarting
+                        else -> theme.textSecondary
                     }
                     pushStyle(SpanStyle(color = healthColor))
                     append("\u2665")
@@ -81,18 +78,17 @@ fun ContainerCard(
                 append(container.name.take(maxNameLen))
                 if (container.updateAvailable) {
                     append(" ")
-                    pushStyle(SpanStyle(color = Color.Yellow, textStyle = TextStyle.Bold))
+                    pushStyle(SpanStyle(color = theme.updateAvailable, textStyle = TextStyle.Bold))
                     append("\u2191")
                     pop()
                 }
             }
             Text(
                 nameText,
-                color = if (isSelected) Color.White else LIGHT_GRAY,
+                color = if (isSelected) theme.textPrimary else theme.textSecondary,
                 textStyle = TextStyle.Bold,
             )
 
-            // Image
             val contentWidth = cardWidth - 4
             Text(container.image.take(contentWidth))
 
@@ -111,26 +107,25 @@ fun ContainerCard(
                 Text(
                     buildAnnotatedString {
                         append(" ".repeat(padding))
-                        pushStyle(SpanStyle(color = Color.Yellow, textStyle = TextStyle.Bold))
+                        pushStyle(SpanStyle(color = theme.warning, textStyle = TextStyle.Bold))
                         append("$spinnerChar ")
                         pop()
-                        pushStyle(SpanStyle(color = Color.White))
+                        pushStyle(SpanStyle(color = theme.textPrimary))
                         append(phaseText)
                         pop()
                     }
                 )
             } else {
-                // Version digest for "latest" tagged images
                 if (isLatestTag(container.image) && container.localDigest != null) {
                     val versionText = buildAnnotatedString {
-                        pushStyle(SpanStyle(color = Color(100, 180, 255)))
+                        pushStyle(SpanStyle(color = theme.versionLocal))
                         append(shortDigest(container.localDigest))
                         pop()
                         if (container.updateAvailable && container.remoteDigest != null) {
-                            pushStyle(SpanStyle(color = Color.Yellow))
+                            pushStyle(SpanStyle(color = theme.updateAvailable))
                             append(" \u2192 ")
                             pop()
-                            pushStyle(SpanStyle(color = Color.Green))
+                            pushStyle(SpanStyle(color = theme.versionRemote))
                             append(shortDigest(container.remoteDigest))
                             pop()
                         }
@@ -138,67 +133,56 @@ fun ContainerCard(
                     Text(versionText)
                 }
 
-                // Status
                 Text(container.status.take(cardWidth - 4), color = stateColor)
 
-                // Ports
                 if (container.ports.isNotEmpty()) {
-                    Text(container.ports.take(cardWidth - 4), color = GRAY)
+                    Text(container.ports.take(cardWidth - 4), color = theme.border)
                 }
 
-                // Resources (running containers only) — with sparklines on selected card
+                // Resources with sparklines on selected card
                 if (container.state == ContainerState.RUNNING && container.memoryLimitMb > 0) {
                     if (isSelected && statsHistory.size >= 2) {
-                        // CPU sparkline + current value
                         Row {
-                            Text("CPU ", color = LIGHT_GRAY)
+                            Text("CPU ", color = theme.textSecondary)
                             Sparkline(
                                 values = statsHistory.map { it.cpuPercent },
                                 maxValue = 100.0,
                                 width = 10,
-                                color = Color.Cyan,
+                                color = theme.sparklineCpu,
                             )
-                            Text(String.format(" %.1f%%", container.cpuPercent), color = Color.White)
+                            Text(String.format(" %.1f%%", container.cpuPercent), color = theme.textPrimary)
                         }
-                        // Memory sparkline + current value
                         Row {
-                            Text("MEM ", color = LIGHT_GRAY)
+                            Text("MEM ", color = theme.textSecondary)
                             Sparkline(
                                 values = statsHistory.map { it.memoryUsageMb },
                                 maxValue = container.memoryLimitMb,
                                 width = 10,
-                                color = Color.Green,
+                                color = theme.sparklineMem,
                             )
-                            Text(String.format(" %.0f/%.0fMB", container.memoryUsageMb, container.memoryLimitMb), color = Color.White)
+                            Text(String.format(" %.0f/%.0fMB", container.memoryUsageMb, container.memoryLimitMb), color = theme.textPrimary)
                         }
                     } else {
-                        // Original numeric display
                         val resourceText = buildAnnotatedString {
-                            pushStyle(SpanStyle(color = LIGHT_GRAY))
+                            pushStyle(SpanStyle(color = theme.textSecondary))
                             append("CPU: ")
                             pop()
-                            pushStyle(SpanStyle(color = Color.White))
+                            pushStyle(SpanStyle(color = theme.textPrimary))
                             append(String.format("%.1f%%", container.cpuPercent))
                             pop()
                             append("  ")
-                            pushStyle(SpanStyle(color = LIGHT_GRAY))
+                            pushStyle(SpanStyle(color = theme.textSecondary))
                             append("MEM: ")
                             pop()
-                            pushStyle(SpanStyle(color = Color.White))
-                            append(
-                                String.format(
-                                    "%.0f/%.0fMB",
-                                    container.memoryUsageMb,
-                                    container.memoryLimitMb
-                                )
-                            )
+                            pushStyle(SpanStyle(color = theme.textPrimary))
+                            append(String.format("%.0f/%.0fMB", container.memoryUsageMb, container.memoryLimitMb))
                             pop()
                         }
                         Text(resourceText)
                     }
                 }
 
-                // Volumes on stopped containers (they have empty content lines available)
+                // Volumes on stopped containers
                 if (container.state != ContainerState.RUNNING && container.volumes.isNotEmpty()) {
                     val maxVols = if (container.ports.isEmpty()) 2 else 1
                     for (vol in container.volumes.take(maxVols)) {
@@ -210,7 +194,7 @@ fun ContainerCard(
                         }
                         Text(
                             buildAnnotatedString {
-                                pushStyle(SpanStyle(color = GRAY))
+                                pushStyle(SpanStyle(color = theme.border))
                                 append("$src \u2192 $dst")
                                 pop()
                             }
@@ -226,17 +210,14 @@ private fun DrawScope.drawBorder(color: Color) {
     val w = width
     val h = height
     if (w < 2 || h < 2) return
-
     drawText(0, 0, "\u250c", foreground = color)
     drawText(0, w - 1, "\u2510", foreground = color)
     drawText(h - 1, 0, "\u2514", foreground = color)
     drawText(h - 1, w - 1, "\u2518", foreground = color)
-
     for (col in 1 until w - 1) {
         drawText(0, col, "\u2500", foreground = color)
         drawText(h - 1, col, "\u2500", foreground = color)
     }
-
     for (row in 1 until h - 1) {
         drawText(row, 0, "\u2502", foreground = color)
         drawText(row, w - 1, "\u2502", foreground = color)

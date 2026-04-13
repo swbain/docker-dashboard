@@ -1,6 +1,7 @@
 package dev.dockerdashboard.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import com.jakewharton.mosaic.LocalTerminalState
 import com.jakewharton.mosaic.layout.KeyEvent
 import com.jakewharton.mosaic.layout.height
@@ -11,7 +12,6 @@ import com.jakewharton.mosaic.text.SpanStyle
 import com.jakewharton.mosaic.text.buildAnnotatedString
 import com.jakewharton.mosaic.ui.Alignment
 import com.jakewharton.mosaic.ui.Box
-import com.jakewharton.mosaic.ui.Color
 import com.jakewharton.mosaic.ui.Column
 import com.jakewharton.mosaic.ui.Text
 import com.jakewharton.mosaic.ui.TextStyle
@@ -42,6 +42,7 @@ sealed interface UiAction {
     data object CycleSortMode : UiAction
     data object ShellExec : UiAction
     data object PruneImages : UiAction
+    data object CycleTheme : UiAction
     data object ScrollUp : UiAction
     data object ScrollDown : UiAction
 }
@@ -54,174 +55,169 @@ fun DashboardApp(
     maxVisibleRows: Int,
     onAction: (UiAction) -> Unit,
 ) {
-    val terminal = LocalTerminalState.current
-    val termWidth = terminal.size.columns
-    val termHeight = terminal.size.rows
+    val theme = allThemes.find { it.name == state.themeName } ?: DarkTheme
+    CompositionLocalProvider(LocalTheme provides theme) {
+        val terminal = LocalTerminalState.current
+        val termWidth = terminal.size.columns
+        val termHeight = terminal.size.rows
 
-    if (state.isInitialLoading) {
-        val spinner = rememberSpinner(true)
-        Box(
-            modifier = Modifier
-                .width(termWidth)
-                .height(termHeight)
-                .onKeyEvent { event -> handleKeyEvent(event, state, onAction) },
-            contentAlignment = Alignment.Center,
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    buildAnnotatedString {
-                        pushStyle(SpanStyle(color = Color(80, 200, 255), textStyle = TextStyle.Bold))
-                        append("Docker Dashboard")
-                        pop()
-                    },
-                )
-                Text("")
-                Text(
-                    buildAnnotatedString {
-                        pushStyle(SpanStyle(color = Color.Yellow))
-                        append("$spinner")
-                        pop()
-                        pushStyle(SpanStyle(color = Color(180, 180, 180)))
-                        append(" Connecting to Docker...")
-                        pop()
-                    },
-                )
-            }
-        }
-        return
-    }
-
-    val columns = max(1, termWidth / MIN_CARD_WIDTH)
-    val cardWidth = termWidth / columns
-
-    when (state.viewMode) {
-        ViewMode.GRID -> {
-            val containers = displayContainers
-            val totalRows = if (containers.isNotEmpty()) (containers.size + columns - 1) / columns else 0
-            val scrollOffset = state.scrollOffset.coerceIn(0, (totalRows - maxVisibleRows).coerceAtLeast(0))
-
-            Box(
-                modifier = Modifier
-                    .width(termWidth)
-                    .onKeyEvent { event -> handleKeyEvent(event, state, onAction) },
-            ) {
-                Column(modifier = Modifier.width(termWidth)) {
-                    // Top status bar
-                    TopStatusBar(
-                        containerCount = state.containers.size,
-                        runningCount = state.containers.count { it.state == ContainerState.RUNNING },
-                        isConnected = state.isConnected,
-                        isInitialLoading = false,
-                        sortMode = state.sortMode,
-                        stateFilter = state.stateFilter,
-                        filterText = state.filterText,
-                    )
-
-                    // Filter bar (when searching or filter active)
-                    if (state.isSearchMode || state.filterText.isNotEmpty()) {
-                        FilterBar(filterText = state.filterText)
-                    }
-
-                    when {
-                        !state.isConnected -> {
-                            Text(
-                                "  Cannot connect to Docker. Is the Docker daemon running?",
-                                color = Color.Red,
-                            )
-                        }
-                        containers.isEmpty() -> {
-                            Text(
-                                "  No containers found.",
-                                color = Color(140, 140, 140),
-                            )
-                        }
-                        else -> {
-                            // Scroll indicator: above
-                            if (scrollOffset > 0) {
-                                Text("  \u25b2 ${scrollOffset} more row(s) above", color = Color(140, 140, 140))
-                            }
-
-                            // Container grid
-                            ContainerGrid(
-                                containers = containers,
-                                selectedIndex = state.selectedIndex,
-                                columns = columns,
-                                cardWidth = cardWidth,
-                                scrollOffset = scrollOffset,
-                                maxVisibleRows = maxVisibleRows,
-                                activeOperation = state.activeOperation,
-                                statsHistory = state.statsHistory,
-                                selectedContainerIds = state.selectedContainerIds,
-                            )
-
-                            // Scroll indicator: below
-                            val rowsBelow = totalRows - scrollOffset - maxVisibleRows
-                            if (rowsBelow > 0) {
-                                Text("  \u25bc ${rowsBelow} more row(s) below", color = Color(140, 140, 140))
-                            }
-                        }
-                    }
-
-                    // Bottom bar
-                    val pendingMessage = state.pendingConfirmation?.message
-                    if (pendingMessage != null) {
-                        ConfirmBar(pendingMessage)
-                    } else {
-                        BottomActionBar(
-                            activeOperation = state.activeOperation,
-                            errorMessage = state.errorMessage,
-                            selectedCount = state.selectedContainerIds.size,
-                        )
-                    }
-                }
-            }
-        }
-        ViewMode.DETAIL -> {
+        if (state.isInitialLoading) {
+            val spinner = rememberSpinner(true)
             Box(
                 modifier = Modifier
                     .width(termWidth)
                     .height(termHeight)
                     .onKeyEvent { event -> handleKeyEvent(event, state, onAction) },
+                contentAlignment = Alignment.Center,
             ) {
-                if (detailData != null) {
-                    DetailPanel(
-                        detail = detailData,
-                        scrollOffset = state.detailScrollOffset,
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        buildAnnotatedString {
+                            pushStyle(SpanStyle(color = theme.accent, textStyle = TextStyle.Bold))
+                            append("Docker Dashboard")
+                            pop()
+                        },
+                    )
+                    Text("")
+                    Text(
+                        buildAnnotatedString {
+                            pushStyle(SpanStyle(color = theme.warning))
+                            append("$spinner")
+                            pop()
+                            pushStyle(SpanStyle(color = theme.textSecondary))
+                            append(" Connecting to Docker...")
+                            pop()
+                        },
+                    )
+                }
+            }
+            return@CompositionLocalProvider
+        }
+
+        val columns = max(1, termWidth / MIN_CARD_WIDTH)
+        val cardWidth = termWidth / columns
+
+        when (state.viewMode) {
+            ViewMode.GRID -> {
+                val containers = displayContainers
+                val totalRows = if (containers.isNotEmpty()) (containers.size + columns - 1) / columns else 0
+                val scrollOffset = state.scrollOffset.coerceIn(0, (totalRows - maxVisibleRows).coerceAtLeast(0))
+
+                Box(
+                    modifier = Modifier
+                        .width(termWidth)
+                        .onKeyEvent { event -> handleKeyEvent(event, state, onAction) },
+                ) {
+                    Column(modifier = Modifier.width(termWidth)) {
+                        TopStatusBar(
+                            containerCount = state.containers.size,
+                            runningCount = state.containers.count { it.state == ContainerState.RUNNING },
+                            isConnected = state.isConnected,
+                            isInitialLoading = false,
+                            sortMode = state.sortMode,
+                            stateFilter = state.stateFilter,
+                            filterText = state.filterText,
+                        )
+
+                        if (state.isSearchMode || state.filterText.isNotEmpty()) {
+                            FilterBar(filterText = state.filterText)
+                        }
+
+                        when {
+                            !state.isConnected -> {
+                                Text(
+                                    "  Cannot connect to Docker. Is the Docker daemon running?",
+                                    color = theme.error,
+                                )
+                            }
+                            containers.isEmpty() -> {
+                                Text(
+                                    "  No containers found.",
+                                    color = theme.textMuted,
+                                )
+                            }
+                            else -> {
+                                if (scrollOffset > 0) {
+                                    Text("  \u25b2 ${scrollOffset} more row(s) above", color = theme.textMuted)
+                                }
+
+                                ContainerGrid(
+                                    containers = containers,
+                                    selectedIndex = state.selectedIndex,
+                                    columns = columns,
+                                    cardWidth = cardWidth,
+                                    scrollOffset = scrollOffset,
+                                    maxVisibleRows = maxVisibleRows,
+                                    activeOperation = state.activeOperation,
+                                    statsHistory = state.statsHistory,
+                                    selectedContainerIds = state.selectedContainerIds,
+                                )
+
+                                val rowsBelow = totalRows - scrollOffset - maxVisibleRows
+                                if (rowsBelow > 0) {
+                                    Text("  \u25bc ${rowsBelow} more row(s) below", color = theme.textMuted)
+                                }
+                            }
+                        }
+
+                        val pendingMessage = state.pendingConfirmation?.message
+                        if (pendingMessage != null) {
+                            ConfirmBar(pendingMessage)
+                        } else {
+                            BottomActionBar(
+                                activeOperation = state.activeOperation,
+                                errorMessage = state.errorMessage,
+                                selectedCount = state.selectedContainerIds.size,
+                            )
+                        }
+                    }
+                }
+            }
+            ViewMode.DETAIL -> {
+                Box(
+                    modifier = Modifier
+                        .width(termWidth)
+                        .height(termHeight)
+                        .onKeyEvent { event -> handleKeyEvent(event, state, onAction) },
+                ) {
+                    if (detailData != null) {
+                        DetailPanel(
+                            detail = detailData,
+                            scrollOffset = state.detailScrollOffset,
+                            termWidth = termWidth,
+                            termHeight = termHeight,
+                        )
+                    } else {
+                        Text("Loading detail...", color = theme.textMuted)
+                    }
+                }
+            }
+            ViewMode.LOGS -> {
+                Box(
+                    modifier = Modifier
+                        .width(termWidth)
+                        .height(termHeight)
+                        .onKeyEvent { event -> handleKeyEvent(event, state, onAction) },
+                ) {
+                    LogViewer(
+                        logLines = state.logLines,
+                        containerName = state.containers.find { it.id == state.logContainerId }?.name ?: "",
+                        scrollOffset = state.logScrollOffset,
                         termWidth = termWidth,
                         termHeight = termHeight,
                     )
-                } else {
-                    Text("Loading detail...", color = Color(140, 140, 140))
                 }
-            }
-        }
-        ViewMode.LOGS -> {
-            Box(
-                modifier = Modifier
-                    .width(termWidth)
-                    .height(termHeight)
-                    .onKeyEvent { event -> handleKeyEvent(event, state, onAction) },
-            ) {
-                LogViewer(
-                    logLines = state.logLines,
-                    containerName = state.containers.find { it.id == state.logContainerId }?.name ?: "",
-                    scrollOffset = state.logScrollOffset,
-                    termWidth = termWidth,
-                    termHeight = termHeight,
-                )
             }
         }
     }
 }
 
 private fun handleKeyEvent(event: KeyEvent, state: DashboardState, onAction: (UiAction) -> Unit): Boolean {
-    // Global keys: q quits from any view
     if (event.key == "q" || event.key == "Q") {
         onAction(UiAction.Quit)
         return true
     }
 
-    // Confirmation keys work globally when a confirmation is pending
     if (state.pendingConfirmation != null) {
         when (event.key) {
             "y", "Y" -> { onAction(UiAction.Confirm); return true }
@@ -232,7 +228,6 @@ private fun handleKeyEvent(event: KeyEvent, state: DashboardState, onAction: (Ui
 
     when (state.viewMode) {
         ViewMode.GRID -> {
-            // In search mode, letter keys type into filter
             if (state.isSearchMode) {
                 when (event.key) {
                     "Escape" -> { onAction(UiAction.CancelSearch); return true }
@@ -264,6 +259,7 @@ private fun handleKeyEvent(event: KeyEvent, state: DashboardState, onAction: (Ui
                 "o" -> onAction(UiAction.CycleSortMode)
                 "e" -> onAction(UiAction.ShellExec)
                 "p" -> onAction(UiAction.PruneImages)
+                "t" -> onAction(UiAction.CycleTheme)
                 else -> return false
             }
         }

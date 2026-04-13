@@ -33,6 +33,7 @@ data class DashboardState(
     val detailContainerId: String? = null,
     val detailScrollOffset: Int = 0,
     val isSearchMode: Boolean = false,
+    val themeName: String = "Dark",
 )
 
 sealed interface PendingConfirmation {

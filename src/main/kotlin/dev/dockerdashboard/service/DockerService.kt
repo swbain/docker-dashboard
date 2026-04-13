@@ -6,6 +6,7 @@ import com.github.dockerjava.api.model.ContainerNetwork
 import com.github.dockerjava.api.model.ExposedPort
 import com.github.dockerjava.api.model.Frame
 import com.github.dockerjava.api.model.HostConfig
+import com.github.dockerjava.api.model.PruneType
 import com.github.dockerjava.api.model.Statistics
 import com.github.dockerjava.core.DefaultDockerClientConfig
 import com.github.dockerjava.core.DockerClientImpl
@@ -259,11 +260,12 @@ class DockerService : Closeable {
         )
     }
 
-    data class PruneResult(val count: Int, val spaceFreedMb: Long)
+    data class PruneResult(val spaceFreedMb: Long)
 
-    suspend fun pruneImages(): PruneResult {
-        // Teammate J implements in Phase 3
-        return PruneResult(0, 0)
+    suspend fun pruneImages(): PruneResult = withContext(Dispatchers.IO) {
+        val response = client.pruneCmd(PruneType.IMAGES).withDangling(false).exec()
+        val spaceFreed = (response.spaceReclaimed ?: 0L) / 1_048_576L
+        PruneResult(spaceFreed)
     }
 
     override fun close() {

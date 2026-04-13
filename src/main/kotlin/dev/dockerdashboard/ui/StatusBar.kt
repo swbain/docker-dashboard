@@ -8,16 +8,12 @@ import com.jakewharton.mosaic.modifier.Modifier
 import com.jakewharton.mosaic.text.SpanStyle
 import com.jakewharton.mosaic.text.buildAnnotatedString
 import com.jakewharton.mosaic.ui.Arrangement
-import com.jakewharton.mosaic.ui.Color
 import com.jakewharton.mosaic.ui.Row
 import com.jakewharton.mosaic.ui.Text
 import com.jakewharton.mosaic.ui.TextStyle
 import dev.dockerdashboard.model.ActiveOperation
 import dev.dockerdashboard.model.SortMode
 import dev.dockerdashboard.model.StateFilter
-
-private val BAR_BG = Color(30, 30, 30)
-private val ACCENT = Color(80, 200, 255)
 
 @Composable
 fun TopStatusBar(
@@ -30,32 +26,33 @@ fun TopStatusBar(
     filterText: String = "",
     modifier: Modifier = Modifier,
 ) {
+    val theme = LocalTheme.current
     val spinner = rememberSpinner(isInitialLoading)
 
     Row(
-        modifier = modifier.fillMaxWidth().background(BAR_BG).padding(horizontal = 1),
+        modifier = modifier.fillMaxWidth().background(theme.barBackground).padding(horizontal = 1),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         val title = buildAnnotatedString {
-            pushStyle(SpanStyle(color = ACCENT, textStyle = TextStyle.Bold))
+            pushStyle(SpanStyle(color = theme.accent, textStyle = TextStyle.Bold))
             append("Docker Dashboard")
             pop()
             append("  ")
             when {
                 isInitialLoading -> {
-                    pushStyle(SpanStyle(color = Color.Yellow))
+                    pushStyle(SpanStyle(color = theme.warning))
                     append("$spinner")
                     pop()
                     append(" Connecting...")
                 }
                 isConnected -> {
-                    pushStyle(SpanStyle(color = Color.Green))
+                    pushStyle(SpanStyle(color = theme.statusRunning))
                     append("\u25cf")
                     pop()
                     append(" Connected")
                 }
                 else -> {
-                    pushStyle(SpanStyle(color = Color.Red))
+                    pushStyle(SpanStyle(color = theme.error))
                     append("\u25cf")
                     pop()
                     append(" Disconnected")
@@ -65,27 +62,27 @@ fun TopStatusBar(
         Text(title)
 
         val stats = buildAnnotatedString {
-            pushStyle(SpanStyle(color = Color.White))
+            pushStyle(SpanStyle(color = theme.textPrimary))
             append("$runningCount")
             pop()
-            pushStyle(SpanStyle(color = Color(140, 140, 140)))
+            pushStyle(SpanStyle(color = theme.textMuted))
             append("/$containerCount running")
             pop()
             if (sortMode != SortMode.NAME) {
                 append("  ")
-                pushStyle(SpanStyle(color = Color.Yellow))
+                pushStyle(SpanStyle(color = theme.warning))
                 append("\u2195 ${sortMode.name}")
                 pop()
             }
             if (stateFilter != StateFilter.ALL) {
                 append("  ")
-                pushStyle(SpanStyle(color = Color.Yellow))
+                pushStyle(SpanStyle(color = theme.warning))
                 append("${stateFilter.name}")
                 pop()
             }
             if (filterText.isNotEmpty()) {
                 append("  ")
-                pushStyle(SpanStyle(color = ACCENT))
+                pushStyle(SpanStyle(color = theme.accent))
                 append("filter: $filterText")
                 pop()
             }
@@ -101,12 +98,13 @@ fun BottomActionBar(
     selectedCount: Int = 0,
     modifier: Modifier = Modifier,
 ) {
+    val theme = LocalTheme.current
     Row(
-        modifier = modifier.fillMaxWidth().background(BAR_BG).padding(horizontal = 1),
+        modifier = modifier.fillMaxWidth().background(theme.barBackground).padding(horizontal = 1),
     ) {
         when {
             errorMessage != null -> {
-                Text(errorMessage, color = Color.Red)
+                Text(errorMessage, color = theme.error)
             }
             activeOperation != null -> {
                 val msg = when (activeOperation) {
@@ -120,78 +118,34 @@ fun BottomActionBar(
                     is ActiveOperation.BulkStarting -> "Starting ${activeOperation.containerName} (${activeOperation.current}/${activeOperation.total})..."
                     is ActiveOperation.BulkPulling -> "Pulling ${activeOperation.containerName} (${activeOperation.current}/${activeOperation.total})..."
                 }
-                Text(msg, color = Color.Yellow)
+                Text(msg, color = theme.warning)
             }
             else -> {
                 val hints = buildAnnotatedString {
                     if (selectedCount > 0) {
-                        pushStyle(SpanStyle(color = Color.Magenta, textStyle = TextStyle.Bold))
+                        pushStyle(SpanStyle(color = theme.multiSelect, textStyle = TextStyle.Bold))
                         append("$selectedCount selected  ")
                         pop()
                     }
-
-                    pushStyle(SpanStyle(color = ACCENT, textStyle = TextStyle.Bold))
-                    append("arrows")
-                    pop()
-                    pushStyle(SpanStyle(color = Color(160, 160, 160)))
-                    append(" navigate  ")
-                    pop()
-
-                    pushStyle(SpanStyle(color = ACCENT, textStyle = TextStyle.Bold))
-                    append("u")
-                    pop()
-                    pushStyle(SpanStyle(color = Color(160, 160, 160)))
-                    append(" update  ")
-                    pop()
-
-                    pushStyle(SpanStyle(color = ACCENT, textStyle = TextStyle.Bold))
-                    append("s")
-                    pop()
-                    pushStyle(SpanStyle(color = Color(160, 160, 160)))
-                    append(" start/stop  ")
-                    pop()
-
-                    pushStyle(SpanStyle(color = ACCENT, textStyle = TextStyle.Bold))
-                    append("l")
-                    pop()
-                    pushStyle(SpanStyle(color = Color(160, 160, 160)))
-                    append(" logs  ")
-                    pop()
-
-                    pushStyle(SpanStyle(color = ACCENT, textStyle = TextStyle.Bold))
-                    append("d")
-                    pop()
-                    pushStyle(SpanStyle(color = Color(160, 160, 160)))
-                    append(" detail  ")
-                    pop()
-
-                    pushStyle(SpanStyle(color = ACCENT, textStyle = TextStyle.Bold))
-                    append("e")
-                    pop()
-                    pushStyle(SpanStyle(color = Color(160, 160, 160)))
-                    append(" shell  ")
-                    pop()
-
-                    pushStyle(SpanStyle(color = ACCENT, textStyle = TextStyle.Bold))
-                    append("/")
-                    pop()
-                    pushStyle(SpanStyle(color = Color(160, 160, 160)))
-                    append(" search  ")
-                    pop()
-
-                    pushStyle(SpanStyle(color = ACCENT, textStyle = TextStyle.Bold))
-                    append("o")
-                    pop()
-                    pushStyle(SpanStyle(color = Color(160, 160, 160)))
-                    append(" sort  ")
-                    pop()
-
-                    pushStyle(SpanStyle(color = ACCENT, textStyle = TextStyle.Bold))
-                    append("q")
-                    pop()
-                    pushStyle(SpanStyle(color = Color(160, 160, 160)))
-                    append(" quit")
-                    pop()
+                    fun hint(key: String, label: String) {
+                        pushStyle(SpanStyle(color = theme.accent, textStyle = TextStyle.Bold))
+                        append(key)
+                        pop()
+                        pushStyle(SpanStyle(color = theme.textSecondary))
+                        append(" $label  ")
+                        pop()
+                    }
+                    hint("arrows", "navigate")
+                    hint("u", "update")
+                    hint("s", "start/stop")
+                    hint("l", "logs")
+                    hint("d", "detail")
+                    hint("e", "shell")
+                    hint("/", "search")
+                    hint("o", "sort")
+                    hint("p", "prune")
+                    hint("t", "theme")
+                    hint("q", "quit")
                 }
                 Text(hints)
             }
@@ -204,24 +158,25 @@ fun ConfirmBar(
     message: String,
     modifier: Modifier = Modifier,
 ) {
+    val theme = LocalTheme.current
     Row(
-        modifier = modifier.fillMaxWidth().background(Color(60, 30, 0)).padding(horizontal = 1),
+        modifier = modifier.fillMaxWidth().background(theme.confirmBackground).padding(horizontal = 1),
     ) {
         val confirmText = buildAnnotatedString {
-            pushStyle(SpanStyle(color = Color.Yellow, textStyle = TextStyle.Bold))
+            pushStyle(SpanStyle(color = theme.warning, textStyle = TextStyle.Bold))
             append(message)
             pop()
             append("  ")
-            pushStyle(SpanStyle(color = Color.White, textStyle = TextStyle.Bold))
+            pushStyle(SpanStyle(color = theme.textPrimary, textStyle = TextStyle.Bold))
             append("[y]")
             pop()
-            pushStyle(SpanStyle(color = Color(160, 160, 160)))
+            pushStyle(SpanStyle(color = theme.textSecondary))
             append(" confirm  ")
             pop()
-            pushStyle(SpanStyle(color = Color.White, textStyle = TextStyle.Bold))
+            pushStyle(SpanStyle(color = theme.textPrimary, textStyle = TextStyle.Bold))
             append("[n]")
             pop()
-            pushStyle(SpanStyle(color = Color(160, 160, 160)))
+            pushStyle(SpanStyle(color = theme.textSecondary))
             append(" cancel")
             pop()
         }

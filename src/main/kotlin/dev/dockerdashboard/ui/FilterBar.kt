@@ -7,7 +7,6 @@ import com.jakewharton.mosaic.layout.padding
 import com.jakewharton.mosaic.modifier.Modifier
 import com.jakewharton.mosaic.text.SpanStyle
 import com.jakewharton.mosaic.text.buildAnnotatedString
-import com.jakewharton.mosaic.ui.Color
 import com.jakewharton.mosaic.ui.Row
 import com.jakewharton.mosaic.ui.Text
 import com.jakewharton.mosaic.ui.TextStyle
@@ -17,18 +16,19 @@ fun FilterBar(
     filterText: String,
     modifier: Modifier = Modifier,
 ) {
+    val theme = LocalTheme.current
     Row(
-        modifier = modifier.fillMaxWidth().background(Color(20, 40, 60)).padding(horizontal = 1),
+        modifier = modifier.fillMaxWidth().background(theme.searchBackground).padding(horizontal = 1),
     ) {
         Text(
             buildAnnotatedString {
-                pushStyle(SpanStyle(color = Color(80, 200, 255), textStyle = TextStyle.Bold))
+                pushStyle(SpanStyle(color = theme.accent, textStyle = TextStyle.Bold))
                 append("/ ")
                 pop()
-                pushStyle(SpanStyle(color = Color.White))
+                pushStyle(SpanStyle(color = theme.textPrimary))
                 append(filterText)
                 pop()
-                pushStyle(SpanStyle(color = Color(80, 200, 255)))
+                pushStyle(SpanStyle(color = theme.accent))
                 append("\u258f")
                 pop()
             },

@@ -17,6 +17,7 @@ import dev.dockerdashboard.service.DockerService
 import dev.dockerdashboard.service.RegistryService
 import dev.dockerdashboard.ui.Direction
 import dev.dockerdashboard.ui.UiAction
+import dev.dockerdashboard.ui.allThemes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -114,6 +115,7 @@ class DashboardStore(
             is UiAction.CycleSortMode -> handleCycleSortMode()
             is UiAction.ShellExec -> handleShellExec()
             is UiAction.PruneImages -> handlePruneImages()
+            is UiAction.CycleTheme -> handleCycleTheme()
             is UiAction.ScrollUp -> handleScrollUp()
             is UiAction.ScrollDown -> handleScrollDown()
         }
@@ -288,7 +290,23 @@ class DashboardStore(
                     }
                 }
             }
-            is PendingConfirmation.PruneImages -> { /* Teammate J implements in Phase 3 */ }
+            is PendingConfirmation.PruneImages -> {
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        state = state.copy(activeOperation = ActiveOperation.Pruning())
+                        val result = dockerService.pruneImages()
+                        if (result.spaceFreedMb > 0) {
+                            setError("Pruned images, freed ${result.spaceFreedMb}MB")
+                        } else {
+                            setError("No unused images to prune")
+                        }
+                    } catch (e: Exception) {
+                        setError("Prune failed: ${e.message?.take(50)}")
+                    } finally {
+                        state = state.copy(activeOperation = null)
+                    }
+                }
+            }
         }
     }
 
@@ -414,7 +432,15 @@ class DashboardStore(
     }
 
     private fun handlePruneImages() {
-        // Teammate J implements in Phase 3
+        val s = state
+        if (s.activeOperation != null) return
+        state = s.copy(pendingConfirmation = PendingConfirmation.PruneImages())
+    }
+
+    private fun handleCycleTheme() {
+        val currentIndex = allThemes.indexOfFirst { it.name == state.themeName }
+        val nextIndex = (currentIndex + 1) % allThemes.size
+        state = state.copy(themeName = allThemes[nextIndex].name)
     }
 
     private fun handleScrollUp() {
