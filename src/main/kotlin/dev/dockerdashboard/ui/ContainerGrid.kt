@@ -26,7 +26,7 @@ fun ContainerGrid(
     val hasComposeContainers = containers.any { it.composeProject != null }
 
     if (!hasComposeContainers) {
-        // Original flat grid (no grouping)
+        // Flat grid with scroll
         val allRows = containers.chunked(columns)
         val visibleRows = allRows.drop(scrollOffset).take(maxVisibleRows)
         Column(modifier = modifier) {
@@ -50,61 +50,61 @@ fun ContainerGrid(
             }
         }
     } else {
-        // Grouped grid by compose project
+        // Grouped grid — render groups with headers, apply scroll to card rows
         val grouped = containers.groupBy { it.composeProject ?: "" }
         val composeGroups = grouped.filter { it.key.isNotEmpty() }.toSortedMap()
         val ungrouped = grouped[""] ?: emptyList()
 
+        // Build ordered list: (projectName, containers) pairs
+        val orderedGroups = mutableListOf<Pair<String, List<ContainerInfo>>>()
+        for ((name, group) in composeGroups) {
+            orderedGroups.add(name to group)
+        }
+        if (ungrouped.isNotEmpty()) {
+            orderedGroups.add("Other" to ungrouped)
+        }
+
+        // Render with flat index tracking, skip card rows before scrollOffset
         var flatIndex = 0
+        var cardRowsSeen = 0
+        var cardRowsRendered = 0
         Column(modifier = modifier) {
-            for ((projectName, groupContainers) in composeGroups) {
-                ComposeGroupHeader(
-                    projectName = projectName,
-                    containerCount = groupContainers.size,
-                )
-                val rows = groupContainers.chunked(columns)
-                for (rowContainers in rows) {
-                    Row {
-                        for (container in rowContainers) {
-                            ContainerCard(
-                                container = container,
-                                isSelected = flatIndex == selectedIndex,
-                                isMultiSelected = container.id in selectedContainerIds,
-                                cardWidth = cardWidth,
-                                activeOperation = activeOperation,
-                                statsHistory = statsHistory[container.id] ?: emptyList(),
-                            )
-                            flatIndex++
-                        }
-                        repeat(columns - rowContainers.size) {
-                            Spacer(modifier = Modifier.width(cardWidth))
-                        }
-                    }
+            for ((groupName, groupContainers) in orderedGroups) {
+                val groupRows = groupContainers.chunked(columns)
+
+                // Check if any of this group's rows are visible
+                val groupStartRow = cardRowsSeen
+                val groupEndRow = cardRowsSeen + groupRows.size
+
+                if (groupEndRow > scrollOffset && cardRowsRendered < maxVisibleRows) {
+                    // Show header if first visible row of this group
+                    ComposeGroupHeader(
+                        projectName = groupName,
+                        containerCount = groupContainers.size,
+                    )
                 }
-            }
-            if (ungrouped.isNotEmpty()) {
-                ComposeGroupHeader(
-                    projectName = "Other",
-                    containerCount = ungrouped.size,
-                )
-                val rows = ungrouped.chunked(columns)
-                for (rowContainers in rows) {
-                    Row {
-                        for (container in rowContainers) {
-                            ContainerCard(
-                                container = container,
-                                isSelected = flatIndex == selectedIndex,
-                                isMultiSelected = container.id in selectedContainerIds,
-                                cardWidth = cardWidth,
-                                activeOperation = activeOperation,
-                                statsHistory = statsHistory[container.id] ?: emptyList(),
-                            )
-                            flatIndex++
+
+                for (rowContainers in groupRows) {
+                    if (cardRowsSeen >= scrollOffset && cardRowsRendered < maxVisibleRows) {
+                        Row {
+                            for ((i, container) in rowContainers.withIndex()) {
+                                ContainerCard(
+                                    container = container,
+                                    isSelected = (flatIndex + i) == selectedIndex,
+                                    isMultiSelected = container.id in selectedContainerIds,
+                                    cardWidth = cardWidth,
+                                    activeOperation = activeOperation,
+                                    statsHistory = statsHistory[container.id] ?: emptyList(),
+                                )
+                            }
+                            repeat(columns - rowContainers.size) {
+                                Spacer(modifier = Modifier.width(cardWidth))
+                            }
                         }
-                        repeat(columns - rowContainers.size) {
-                            Spacer(modifier = Modifier.width(cardWidth))
-                        }
+                        cardRowsRendered++
                     }
+                    flatIndex += rowContainers.size
+                    cardRowsSeen++
                 }
             }
         }

@@ -483,11 +483,6 @@ class DashboardStore(
                         fetched
                     }
                     state = state.let { s ->
-                        val newIndex = if (s.selectedIndex >= withStats.size && withStats.isNotEmpty()) {
-                            withStats.size - 1
-                        } else {
-                            s.selectedIndex
-                        }
                         val knownInfo = updateInfoMap
                         val merged = withStats.map { c ->
                             val info = knownInfo[c.id]
@@ -496,6 +491,13 @@ class DashboardStore(
                                 localDigest = info?.localDigest,
                                 remoteDigest = info?.remoteDigest,
                             )
+                        }
+
+                        // Clamp selectedIndex to container count
+                        val newIndex = if (merged.isNotEmpty()) {
+                            s.selectedIndex.coerceAtMost(merged.size - 1)
+                        } else {
+                            0
                         }
 
                         // Append stats snapshots to rolling history (max 30 per container)
