@@ -7,7 +7,6 @@ import com.jakewharton.mosaic.LocalTerminalState
 import com.jakewharton.mosaic.runMosaicBlocking
 import dev.dockerdashboard.service.DockerService
 import dev.dockerdashboard.service.RegistryService
-import dev.dockerdashboard.ui.CARD_HEIGHT
 import dev.dockerdashboard.ui.DashboardApp
 import dev.dockerdashboard.ui.MIN_CARD_WIDTH
 import kotlinx.coroutines.Job
@@ -33,14 +32,14 @@ fun main() {
             val terminal = LocalTerminalState.current
             val columns = max(1, terminal.size.columns / MIN_CARD_WIDTH)
             val availableHeight = terminal.size.rows - 2
-            val maxVisibleRows = max(1, availableHeight / CARD_HEIGHT)
 
             DashboardApp(
                 state = store.state,
                 displayContainers = store.displayContainers,
                 detailData = store.detailData,
-                maxVisibleRows = maxVisibleRows,
-                onAction = { action -> store.dispatch(action, columns, maxVisibleRows) },
+                columns = columns,
+                availableHeight = availableHeight,
+                onAction = { action -> store.dispatch(action, columns, availableHeight) },
             )
 
             LaunchedEffect(Unit) { keepAliveJob.join() }

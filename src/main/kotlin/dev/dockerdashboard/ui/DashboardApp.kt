@@ -20,7 +20,6 @@ import dev.dockerdashboard.model.ContainerInfo
 import dev.dockerdashboard.model.ContainerState
 import dev.dockerdashboard.model.DashboardState
 import dev.dockerdashboard.model.ViewMode
-import kotlin.math.max
 
 enum class Direction { UP, DOWN, LEFT, RIGHT }
 
@@ -52,7 +51,8 @@ fun DashboardApp(
     state: DashboardState,
     displayContainers: List<ContainerInfo>,
     detailData: ContainerDetail?,
-    maxVisibleRows: Int,
+    columns: Int,
+    availableHeight: Int,
     onAction: (UiAction) -> Unit,
 ) {
     val theme = allThemes.find { it.name == state.themeName } ?: DarkTheme
@@ -94,14 +94,15 @@ fun DashboardApp(
             return@CompositionLocalProvider
         }
 
-        val columns = max(1, termWidth / MIN_CARD_WIDTH)
         val cardWidth = termWidth / columns
 
         when (state.viewMode) {
             ViewMode.GRID -> {
                 val containers = displayContainers
-                val totalRows = if (containers.isNotEmpty()) (containers.size + columns - 1) / columns else 0
-                val scrollOffset = state.scrollOffset.coerceIn(0, (totalRows - maxVisibleRows).coerceAtLeast(0))
+                val layout = buildGridLayout(containers, columns)
+                val scrollOffset = state.scrollOffset.coerceIn(0, (layout.visualRows.size - 1).coerceAtLeast(0))
+                val filterBarHeight = if (state.isSearchMode || state.filterText.isNotEmpty()) 1 else 0
+                val gridAvailableHeight = availableHeight - filterBarHeight
 
                 Box(
                     modifier = Modifier
@@ -119,7 +120,7 @@ fun DashboardApp(
                             filterText = state.filterText,
                         )
 
-                        if (state.isSearchMode || state.filterText.isNotEmpty()) {
+                        if (filterBarHeight > 0) {
                             FilterBar(filterText = state.filterText)
                         }
 
@@ -137,25 +138,31 @@ fun DashboardApp(
                                 )
                             }
                             else -> {
-                                if (scrollOffset > 0) {
-                                    Text("  \u25b2 ${scrollOffset} more row(s) above", color = theme.textMuted)
+                                val cardRowsAbove = if (scrollOffset > 0) {
+                                    layout.visualRows.take(scrollOffset).count { it is VisualRow.Cards }
+                                } else 0
+                                if (cardRowsAbove > 0) {
+                                    Text("  \u25b2 $cardRowsAbove more row(s) above", color = theme.textMuted)
                                 }
 
                                 ContainerGrid(
+                                    layout = layout,
                                     containers = containers,
                                     selectedIndex = state.selectedIndex,
-                                    columns = columns,
                                     cardWidth = cardWidth,
                                     scrollOffset = scrollOffset,
-                                    maxVisibleRows = maxVisibleRows,
+                                    availableHeight = gridAvailableHeight,
                                     activeOperation = state.activeOperation,
                                     statsHistory = state.statsHistory,
                                     selectedContainerIds = state.selectedContainerIds,
                                 )
 
-                                val rowsBelow = totalRows - scrollOffset - maxVisibleRows
-                                if (rowsBelow > 0) {
-                                    Text("  \u25bc ${rowsBelow} more row(s) below", color = theme.textMuted)
+                                val visibleRange = layout.visibleRowRange(scrollOffset, gridAvailableHeight)
+                                val visibleEnd = if (visibleRange.isEmpty()) scrollOffset else visibleRange.last + 1
+                                val cardRowsBelow = layout.visualRows.drop(visibleEnd)
+                                    .count { it is VisualRow.Cards }
+                                if (cardRowsBelow > 0) {
+                                    Text("  \u25bc $cardRowsBelow more row(s) below", color = theme.textMuted)
                                 }
                             }
                         }

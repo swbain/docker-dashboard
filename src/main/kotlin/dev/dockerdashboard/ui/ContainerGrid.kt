@@ -12,99 +12,46 @@ import dev.dockerdashboard.model.StatsSnapshot
 
 @Composable
 fun ContainerGrid(
+    layout: GridLayout,
     containers: List<ContainerInfo>,
     selectedIndex: Int,
-    columns: Int,
     cardWidth: Int,
     scrollOffset: Int,
-    maxVisibleRows: Int,
+    availableHeight: Int,
     activeOperation: ActiveOperation?,
     statsHistory: Map<String, List<StatsSnapshot>> = emptyMap(),
     selectedContainerIds: Set<String> = emptySet(),
     modifier: Modifier = Modifier,
 ) {
-    val hasComposeContainers = containers.any { it.composeProject != null }
+    val visibleRange = layout.visibleRowRange(scrollOffset, availableHeight)
 
-    if (!hasComposeContainers) {
-        // Flat grid with scroll
-        val allRows = containers.chunked(columns)
-        val visibleRows = allRows.drop(scrollOffset).take(maxVisibleRows)
-        Column(modifier = modifier) {
-            for ((rowIndex, rowContainers) in visibleRows.withIndex()) {
-                Row {
-                    for ((colIndex, container) in rowContainers.withIndex()) {
-                        val flatIndex = (rowIndex + scrollOffset) * columns + colIndex
-                        ContainerCard(
-                            container = container,
-                            isSelected = flatIndex == selectedIndex,
-                            isMultiSelected = container.id in selectedContainerIds,
-                            cardWidth = cardWidth,
-                            activeOperation = activeOperation,
-                            statsHistory = statsHistory[container.id] ?: emptyList(),
-                        )
-                    }
-                    repeat(columns - rowContainers.size) {
-                        Spacer(modifier = Modifier.width(cardWidth))
-                    }
-                }
-            }
-        }
-    } else {
-        // Grouped grid — render groups with headers, apply scroll to card rows
-        val grouped = containers.groupBy { it.composeProject ?: "" }
-        val composeGroups = grouped.filter { it.key.isNotEmpty() }.toSortedMap()
-        val ungrouped = grouped[""] ?: emptyList()
-
-        // Build ordered list: (projectName, containers) pairs
-        val orderedGroups = mutableListOf<Pair<String, List<ContainerInfo>>>()
-        for ((name, group) in composeGroups) {
-            orderedGroups.add(name to group)
-        }
-        if (ungrouped.isNotEmpty()) {
-            orderedGroups.add("Other" to ungrouped)
-        }
-
-        // Render with flat index tracking, skip card rows before scrollOffset
-        var flatIndex = 0
-        var cardRowsSeen = 0
-        var cardRowsRendered = 0
-        Column(modifier = modifier) {
-            for ((groupName, groupContainers) in orderedGroups) {
-                val groupRows = groupContainers.chunked(columns)
-
-                // Check if any of this group's rows are visible
-                val groupStartRow = cardRowsSeen
-                val groupEndRow = cardRowsSeen + groupRows.size
-
-                if (groupEndRow > scrollOffset && cardRowsRendered < maxVisibleRows) {
-                    // Show header if first visible row of this group
+    Column(modifier = modifier) {
+        for (vrIdx in visibleRange) {
+            when (val vr = layout.visualRows[vrIdx]) {
+                is VisualRow.Header -> {
                     ComposeGroupHeader(
-                        projectName = groupName,
-                        containerCount = groupContainers.size,
+                        projectName = vr.groupName,
+                        containerCount = vr.containerCount,
                     )
                 }
-
-                for (rowContainers in groupRows) {
-                    if (cardRowsSeen >= scrollOffset && cardRowsRendered < maxVisibleRows) {
-                        Row {
-                            for ((i, container) in rowContainers.withIndex()) {
-                                ContainerCard(
-                                    container = container,
-                                    isSelected = (flatIndex + i) == selectedIndex,
-                                    isMultiSelected = container.id in selectedContainerIds,
-                                    cardWidth = cardWidth,
-                                    activeOperation = activeOperation,
-                                    statsHistory = statsHistory[container.id] ?: emptyList(),
-                                )
-                            }
-                            repeat(columns - rowContainers.size) {
-                                Spacer(modifier = Modifier.width(cardWidth))
-                            }
+                is VisualRow.Cards -> {
+                    Row {
+                        for (i in 0 until vr.count) {
+                            val flatIndex = vr.flatStartIndex + i
+                            val container = containers[flatIndex]
+                            ContainerCard(
+                                container = container,
+                                isSelected = flatIndex == selectedIndex,
+                                isMultiSelected = container.id in selectedContainerIds,
+                                cardWidth = cardWidth,
+                                activeOperation = activeOperation,
+                                statsHistory = statsHistory[container.id] ?: emptyList(),
+                            )
                         }
-                        cardRowsRendered++
+                        repeat(layout.columns - vr.count) {
+                            Spacer(modifier = Modifier.width(cardWidth))
+                        }
                     }
-                    flatIndex += rowContainers.size
-                    cardRowsSeen++
                 }
             }
         }

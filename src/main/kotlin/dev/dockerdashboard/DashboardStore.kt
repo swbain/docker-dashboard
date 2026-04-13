@@ -18,6 +18,9 @@ import dev.dockerdashboard.service.RegistryService
 import dev.dockerdashboard.ui.Direction
 import dev.dockerdashboard.ui.UiAction
 import dev.dockerdashboard.ui.allThemes
+import dev.dockerdashboard.ui.buildGridLayout
+import dev.dockerdashboard.ui.moveIndex
+import dev.dockerdashboard.ui.scrollToReveal
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -69,6 +72,19 @@ class DashboardStore(
                 SortMode.CREATED -> list.sortedByDescending { it.created }
             }
 
+            // Reorder by compose groups so flat index matches visual order
+            if (list.any { it.composeProject != null }) {
+                val grouped = list.groupBy { it.composeProject ?: "" }
+                val composeGroups = grouped.filter { it.key.isNotEmpty() }.toSortedMap()
+                val ungrouped = grouped[""] ?: emptyList()
+                val reordered = mutableListOf<ContainerInfo>()
+                for ((_, group) in composeGroups) {
+                    reordered.addAll(group)
+                }
+                reordered.addAll(ungrouped)
+                list = reordered
+            }
+
             return list
         }
 
@@ -87,9 +103,9 @@ class DashboardStore(
         startUpdateCheckLoop()
     }
 
-    fun dispatch(action: UiAction, columns: Int, maxVisibleRows: Int) {
+    fun dispatch(action: UiAction, columns: Int, availableHeight: Int) {
         when (action) {
-            is UiAction.Move -> reduceMove(action.direction, columns, maxVisibleRows)
+            is UiAction.Move -> reduceMove(action.direction, columns, availableHeight)
             is UiAction.ToggleStartStop -> handleToggleStartStop()
             is UiAction.PullAndRestart -> handlePullAndRestart()
             is UiAction.Confirm -> handleConfirm()
@@ -121,22 +137,13 @@ class DashboardStore(
         }
     }
 
-    private fun reduceMove(direction: Direction, columns: Int, maxVisibleRows: Int) {
+    private fun reduceMove(direction: Direction, columns: Int, availableHeight: Int) {
         val s = state
-        val count = displayContainers.size
-        if (count == 0) return
-        val newIndex = when (direction) {
-            Direction.UP -> (s.selectedIndex - columns).coerceAtLeast(0)
-            Direction.DOWN -> (s.selectedIndex + columns).coerceAtMost(count - 1)
-            Direction.LEFT -> (s.selectedIndex - 1).coerceAtLeast(0)
-            Direction.RIGHT -> (s.selectedIndex + 1).coerceAtMost(count - 1)
-        }
-        val selectedRow = newIndex / columns
-        val newScroll = when {
-            selectedRow < s.scrollOffset -> selectedRow
-            selectedRow >= s.scrollOffset + maxVisibleRows -> selectedRow - maxVisibleRows + 1
-            else -> s.scrollOffset
-        }
+        val containers = displayContainers
+        if (containers.isEmpty()) return
+        val layout = buildGridLayout(containers, columns)
+        val newIndex = layout.moveIndex(s.selectedIndex, direction)
+        val newScroll = layout.scrollToReveal(newIndex, s.scrollOffset, availableHeight)
         state = s.copy(selectedIndex = newIndex, scrollOffset = newScroll)
     }
 

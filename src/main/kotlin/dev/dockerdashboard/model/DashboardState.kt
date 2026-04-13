@@ -19,7 +19,7 @@ data class DashboardState(
     val isConnected: Boolean = false,
     val isInitialLoading: Boolean = true,
     val pendingConfirmation: PendingConfirmation? = null,
-    val scrollOffset: Int = 0,
+    val scrollOffset: Int = 0, // Visual-row index into GridLayout.visualRows
 
     val viewMode: ViewMode = ViewMode.GRID,
     val filterText: String = "",
