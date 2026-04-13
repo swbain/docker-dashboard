@@ -27,6 +27,7 @@ private val LIGHT_GRAY = Color(160, 160, 160)
 fun ContainerCard(
     container: ContainerInfo,
     isSelected: Boolean,
+    isMultiSelected: Boolean = false,
     cardWidth: Int,
     activeOperation: ActiveOperation? = null,
     statsHistory: List<StatsSnapshot> = emptyList(),
@@ -36,6 +37,7 @@ fun ContainerCard(
 
     val borderColor = when {
         isUpdating -> Color.Yellow
+        isMultiSelected -> Color.Magenta
         isSelected -> Color.Cyan
         container.updateAvailable -> Color.Yellow
         else -> GRAY

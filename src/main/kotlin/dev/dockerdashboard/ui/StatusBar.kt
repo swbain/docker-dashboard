@@ -13,6 +13,8 @@ import com.jakewharton.mosaic.ui.Row
 import com.jakewharton.mosaic.ui.Text
 import com.jakewharton.mosaic.ui.TextStyle
 import dev.dockerdashboard.model.ActiveOperation
+import dev.dockerdashboard.model.SortMode
+import dev.dockerdashboard.model.StateFilter
 
 private val BAR_BG = Color(30, 30, 30)
 private val ACCENT = Color(80, 200, 255)
@@ -23,7 +25,9 @@ fun TopStatusBar(
     runningCount: Int,
     isConnected: Boolean,
     isInitialLoading: Boolean,
-
+    sortMode: SortMode = SortMode.NAME,
+    stateFilter: StateFilter = StateFilter.ALL,
+    filterText: String = "",
     modifier: Modifier = Modifier,
 ) {
     val spinner = rememberSpinner(isInitialLoading)
@@ -46,13 +50,13 @@ fun TopStatusBar(
                 }
                 isConnected -> {
                     pushStyle(SpanStyle(color = Color.Green))
-                    append("●")
+                    append("\u25cf")
                     pop()
                     append(" Connected")
                 }
                 else -> {
                     pushStyle(SpanStyle(color = Color.Red))
-                    append("●")
+                    append("\u25cf")
                     pop()
                     append(" Disconnected")
                 }
@@ -67,6 +71,24 @@ fun TopStatusBar(
             pushStyle(SpanStyle(color = Color(140, 140, 140)))
             append("/$containerCount running")
             pop()
+            if (sortMode != SortMode.NAME) {
+                append("  ")
+                pushStyle(SpanStyle(color = Color.Yellow))
+                append("\u2195 ${sortMode.name}")
+                pop()
+            }
+            if (stateFilter != StateFilter.ALL) {
+                append("  ")
+                pushStyle(SpanStyle(color = Color.Yellow))
+                append("${stateFilter.name}")
+                pop()
+            }
+            if (filterText.isNotEmpty()) {
+                append("  ")
+                pushStyle(SpanStyle(color = ACCENT))
+                append("filter: $filterText")
+                pop()
+            }
         }
         Text(stats)
     }
@@ -76,6 +98,7 @@ fun TopStatusBar(
 fun BottomActionBar(
     activeOperation: ActiveOperation?,
     errorMessage: String?,
+    selectedCount: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -93,14 +116,20 @@ fun BottomActionBar(
                     is ActiveOperation.Starting -> "Starting ${activeOperation.containerName}..."
                     is ActiveOperation.Creating -> "Creating container for ${activeOperation.containerName}..."
                     is ActiveOperation.Pruning -> "Pruning unused images..."
-                    is ActiveOperation.BulkStopping -> "Stopping ${activeOperation.current}/${activeOperation.total}..."
-                    is ActiveOperation.BulkStarting -> "Starting ${activeOperation.current}/${activeOperation.total}..."
-                    is ActiveOperation.BulkPulling -> "Pulling ${activeOperation.current}/${activeOperation.total}..."
+                    is ActiveOperation.BulkStopping -> "Stopping ${activeOperation.containerName} (${activeOperation.current}/${activeOperation.total})..."
+                    is ActiveOperation.BulkStarting -> "Starting ${activeOperation.containerName} (${activeOperation.current}/${activeOperation.total})..."
+                    is ActiveOperation.BulkPulling -> "Pulling ${activeOperation.containerName} (${activeOperation.current}/${activeOperation.total})..."
                 }
                 Text(msg, color = Color.Yellow)
             }
             else -> {
                 val hints = buildAnnotatedString {
+                    if (selectedCount > 0) {
+                        pushStyle(SpanStyle(color = Color.Magenta, textStyle = TextStyle.Bold))
+                        append("$selectedCount selected  ")
+                        pop()
+                    }
+
                     pushStyle(SpanStyle(color = ACCENT, textStyle = TextStyle.Bold))
                     append("arrows")
                     pop()
@@ -141,6 +170,20 @@ fun BottomActionBar(
                     pop()
                     pushStyle(SpanStyle(color = Color(160, 160, 160)))
                     append(" shell  ")
+                    pop()
+
+                    pushStyle(SpanStyle(color = ACCENT, textStyle = TextStyle.Bold))
+                    append("/")
+                    pop()
+                    pushStyle(SpanStyle(color = Color(160, 160, 160)))
+                    append(" search  ")
+                    pop()
+
+                    pushStyle(SpanStyle(color = ACCENT, textStyle = TextStyle.Bold))
+                    append("o")
+                    pop()
+                    pushStyle(SpanStyle(color = Color(160, 160, 160)))
+                    append(" sort  ")
                     pop()
 
                     pushStyle(SpanStyle(color = ACCENT, textStyle = TextStyle.Bold))

@@ -112,7 +112,15 @@ fun DashboardApp(
                         runningCount = state.containers.count { it.state == ContainerState.RUNNING },
                         isConnected = state.isConnected,
                         isInitialLoading = false,
+                        sortMode = state.sortMode,
+                        stateFilter = state.stateFilter,
+                        filterText = state.filterText,
                     )
+
+                    // Filter bar (when searching or filter active)
+                    if (state.isSearchMode || state.filterText.isNotEmpty()) {
+                        FilterBar(filterText = state.filterText)
+                    }
 
                     when {
                         !state.isConnected -> {
@@ -143,6 +151,7 @@ fun DashboardApp(
                                 maxVisibleRows = maxVisibleRows,
                                 activeOperation = state.activeOperation,
                                 statsHistory = state.statsHistory,
+                                selectedContainerIds = state.selectedContainerIds,
                             )
 
                             // Scroll indicator: below
@@ -161,6 +170,7 @@ fun DashboardApp(
                         BottomActionBar(
                             activeOperation = state.activeOperation,
                             errorMessage = state.errorMessage,
+                            selectedCount = state.selectedContainerIds.size,
                         )
                     }
                 }

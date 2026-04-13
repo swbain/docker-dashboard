@@ -92,7 +92,13 @@ class DashboardStore(
             is UiAction.ToggleStartStop -> handleToggleStartStop()
             is UiAction.PullAndRestart -> handlePullAndRestart()
             is UiAction.Confirm -> handleConfirm()
-            is UiAction.Cancel -> state = state.copy(pendingConfirmation = null)
+            is UiAction.Cancel -> {
+                if (state.pendingConfirmation != null) {
+                    state = state.copy(pendingConfirmation = null)
+                } else if (state.selectedContainerIds.isNotEmpty()) {
+                    state = state.copy(selectedContainerIds = emptySet())
+                }
+            }
             is UiAction.Quit -> {
                 dockerService.close()
                 exitProcess(0)
@@ -134,8 +140,14 @@ class DashboardStore(
 
     private fun handleToggleStartStop() {
         val s = state
-        val container = displayContainers.getOrNull(s.selectedIndex) ?: return
         if (s.activeOperation != null) return
+
+        if (s.selectedContainerIds.isNotEmpty()) {
+            state = s.copy(pendingConfirmation = PendingConfirmation.BulkStop(s.selectedContainerIds))
+            return
+        }
+
+        val container = displayContainers.getOrNull(s.selectedIndex) ?: return
 
         when (container.state) {
             ContainerState.RUNNING -> {
@@ -166,8 +178,14 @@ class DashboardStore(
 
     private fun handlePullAndRestart() {
         val s = state
-        val container = displayContainers.getOrNull(s.selectedIndex) ?: return
         if (s.activeOperation != null) return
+
+        if (s.selectedContainerIds.isNotEmpty()) {
+            state = s.copy(pendingConfirmation = PendingConfirmation.BulkUpdate(s.selectedContainerIds))
+            return
+        }
+
+        val container = displayContainers.getOrNull(s.selectedIndex) ?: return
 
         state = s.copy(
             pendingConfirmation = PendingConfirmation.PullAndRestart(
@@ -230,9 +248,47 @@ class DashboardStore(
             is PendingConfirmation.ShellExec -> {
                 onExecRequest?.invoke(ExecRequest(pending.containerId, pending.containerName))
             }
-            is PendingConfirmation.BulkStop -> { /* implemented by bulk ops teammate */ }
-            is PendingConfirmation.BulkUpdate -> { /* implemented by bulk ops teammate */ }
-            is PendingConfirmation.PruneImages -> { /* implemented by image cleanup teammate */ }
+            is PendingConfirmation.BulkStop -> {
+                val ids = pending.containerIds.toList()
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        for ((i, id) in ids.withIndex()) {
+                            val container = state.containers.find { it.id == id } ?: continue
+                            state = state.copy(
+                                activeOperation = ActiveOperation.BulkStopping(i + 1, ids.size, container.name),
+                            )
+                            dockerService.stopContainer(id)
+                        }
+                    } catch (e: Exception) {
+                        setError("Bulk stop failed: ${e.message?.take(50)}")
+                    } finally {
+                        state = state.copy(activeOperation = null, selectedContainerIds = emptySet())
+                    }
+                }
+            }
+            is PendingConfirmation.BulkUpdate -> {
+                val ids = pending.containerIds.toList()
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        for ((i, id) in ids.withIndex()) {
+                            val container = state.containers.find { it.id == id } ?: continue
+                            val name = container.name
+                            state = state.copy(
+                                activeOperation = ActiveOperation.BulkPulling(i + 1, ids.size, name),
+                            )
+                            val params = dockerService.inspectAndStop(id)
+                            dockerService.pullImage(params.image)
+                            val newId = dockerService.recreateFromParams(params)
+                            dockerService.startContainer(newId)
+                        }
+                    } catch (e: Exception) {
+                        setError("Bulk update failed: ${e.message?.take(50)}")
+                    } finally {
+                        state = state.copy(activeOperation = null, selectedContainerIds = emptySet())
+                    }
+                }
+            }
+            is PendingConfirmation.PruneImages -> { /* Teammate J implements in Phase 3 */ }
         }
     }
 
@@ -308,31 +364,57 @@ class DashboardStore(
     // --- Skeleton handlers for Phase 2/3 features ---
 
     private fun handleToggleSelect() {
-        // Teammate I implements
+        val s = state
+        val container = displayContainers.getOrNull(s.selectedIndex) ?: return
+        val newSet = if (container.id in s.selectedContainerIds) {
+            s.selectedContainerIds - container.id
+        } else {
+            s.selectedContainerIds + container.id
+        }
+        state = s.copy(selectedContainerIds = newSet)
     }
 
     private fun handleTypeFilterChar(char: Char) {
-        // Teammate F implements
+        if (char == '\b') {
+            if (state.filterText.isNotEmpty()) {
+                state = state.copy(filterText = state.filterText.dropLast(1))
+            }
+        } else {
+            state = state.copy(filterText = state.filterText + char)
+        }
+        state = state.copy(selectedIndex = 0, scrollOffset = 0)
     }
 
     private fun handleStartSearch() {
-        // Teammate F implements
+        state = state.copy(isSearchMode = true)
     }
 
     private fun handleCancelSearch() {
-        // Teammate F implements
+        state = state.copy(isSearchMode = false, filterText = "")
     }
 
     private fun handleCycleStateFilter() {
-        // Teammate F implements
+        val next = when (state.stateFilter) {
+            StateFilter.ALL -> StateFilter.RUNNING
+            StateFilter.RUNNING -> StateFilter.STOPPED
+            StateFilter.STOPPED -> StateFilter.ALL
+        }
+        state = state.copy(stateFilter = next, selectedIndex = 0, scrollOffset = 0)
     }
 
     private fun handleCycleSortMode() {
-        // Teammate G implements
+        val next = when (state.sortMode) {
+            SortMode.NAME -> SortMode.STATE
+            SortMode.STATE -> SortMode.CPU
+            SortMode.CPU -> SortMode.MEMORY
+            SortMode.MEMORY -> SortMode.CREATED
+            SortMode.CREATED -> SortMode.NAME
+        }
+        state = state.copy(sortMode = next, selectedIndex = 0, scrollOffset = 0)
     }
 
     private fun handlePruneImages() {
-        // Teammate J implements
+        // Teammate J implements in Phase 3
     }
 
     private fun handleScrollUp() {
